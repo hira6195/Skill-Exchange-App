@@ -1,0 +1,42 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "skill-exchange-app-80674",
+          "appId": "1:276245144384:android:37341c2e1dac6687b690a5",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "skill-exchange-app-80674",
+          "configurations": {
+            "android": "1:276245144384:android:37341c2e1dac6687b690a5",
+            "ios": "1:276245144384:ios:98a85b0dfb257476b690a5",
+            "macos": "1:276245144384:ios:98a85b0dfb257476b690a5",
+            "web": "1:276245144384:web:22bdfc2690a39694b690a5",
+            "windows": "1:276245144384:web:7ec1094ae74edd6ab690a5"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run lint",
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ]
+    }
+  ]
+}
