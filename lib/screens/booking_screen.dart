@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:skill_exchange/screens/my_bookings_screen.dart';
 import 'package:skill_exchange/services/booking_service.dart';
+import 'package:skill_exchange/services/chat_service.dart';
 
 class BookingScreen extends StatefulWidget {
   final String expertId;
@@ -25,6 +26,7 @@ class BookingScreen extends StatefulWidget {
 
 class _BookingScreenState extends State<BookingScreen> {
   final BookingService _bookingService = BookingService();
+  final ChatService _chatService = ChatService();
   final TextEditingController _notesController = TextEditingController();
 
   DateTime? _selectedDate;
@@ -54,7 +56,6 @@ class _BookingScreenState extends State<BookingScreen> {
     super.dispose();
   }
 
-  // Date Picker Handler
   Future<void> _selectDate(BuildContext context) async {
     final DateTime now = DateTime.now();
     final DateTime? picked = await showDatePicker(
@@ -83,7 +84,6 @@ class _BookingScreenState extends State<BookingScreen> {
     }
   }
 
-  // Process Confirmation Button
   Future<void> _handleConfirmBooking() async {
     if (_selectedDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -113,7 +113,24 @@ class _BookingScreenState extends State<BookingScreen> {
       skill: widget.skill.isNotEmpty ? widget.skill : 'Matched Skill',
       amount: widget.hourlyRate,
       date: _selectedDate,
+      sessionTime: _selectedTime!,
+      sessionType: _sessionType,
+      duration: _selectedDuration,
+      notes: _notesController.text.trim(),
     );
+
+    if (success && widget.expertId.isNotEmpty) {
+      try {
+        final chatId = await _chatService.createOrGetChat(widget.expertId);
+        await _chatService.sendMessage(
+          chatId,
+          widget.expertId,
+          "Hello! I've booked a ${_selectedDuration} ${_sessionType} session for ${widget.skill} on ${DateFormat('dd MMMM yyyy').format(_selectedDate!)} at ${_selectedTime!}.",
+        );
+      } catch (e) {
+        debugPrint("Chat initiation auto-message error: $e");
+      }
+    }
 
     if (!mounted) return;
 
@@ -166,11 +183,8 @@ class _BookingScreenState extends State<BookingScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Real Matched Expert Profile Section
             _buildExpertCard(),
             const SizedBox(height: 24),
-
-            // Select Date Section
             const Text(
               'Select Date',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -209,8 +223,6 @@ class _BookingScreenState extends State<BookingScreen> {
               ),
             ),
             const SizedBox(height: 24),
-
-            // Available Time Slots Section
             const Text(
               'Available Time Slots',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -239,8 +251,6 @@ class _BookingScreenState extends State<BookingScreen> {
               }).toList(),
             ),
             const SizedBox(height: 24),
-
-            // Session Type Section
             const Text(
               'Session Type',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -279,8 +289,6 @@ class _BookingScreenState extends State<BookingScreen> {
               ],
             ),
             const SizedBox(height: 20),
-
-            // Duration Section
             const Text(
               'Duration',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -314,8 +322,6 @@ class _BookingScreenState extends State<BookingScreen> {
               ),
             ),
             const SizedBox(height: 24),
-
-            // Notes Section
             const Text(
               'Notes (Optional)',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -340,8 +346,6 @@ class _BookingScreenState extends State<BookingScreen> {
               ),
             ),
             const SizedBox(height: 32),
-
-            // Confirm Booking Button
             SizedBox(
               width: double.infinity,
               height: 52,
@@ -379,7 +383,6 @@ class _BookingScreenState extends State<BookingScreen> {
     );
   }
 
-  // Expert Card Component displaying Real Matched Expert
   Widget _buildExpertCard() {
     return Container(
       padding: const EdgeInsets.all(16),

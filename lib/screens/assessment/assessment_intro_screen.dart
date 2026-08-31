@@ -1,11 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-// IMPORTANT: Centralized model import
 import 'package:skill_exchange/models/quiz_question.dart';
 import 'package:skill_exchange/screens/assessment/quiz_screen.dart';
 import 'package:skill_exchange/services/firestore_service.dart';
-// Hide duplicate AssessmentQuizData from service import to eliminate collision
 import 'package:skill_exchange/services/gemini_service.dart' hide AssessmentQuizData;
 
 class AssessmentIntroScreen extends StatefulWidget {
@@ -34,7 +32,6 @@ class _AssessmentIntroScreenState extends State<AssessmentIntroScreen> {
 
   Future<void> _loadAssessmentFromAI() async {
     try {
-      // Minimum 10 questions requested
       final quizData = await GeminiService().generateDynamicQuiz(
         skill: widget.skillName,
         certificateText: widget.certificateText,
@@ -49,9 +46,7 @@ class _AssessmentIntroScreenState extends State<AssessmentIntroScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Error generating assessment: $e"),
@@ -67,95 +62,88 @@ class _AssessmentIntroScreenState extends State<AssessmentIntroScreen> {
     const primaryPurple = Color(0xFF6C5CE7);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFFAF9FE),
       appBar: AppBar(
         centerTitle: true,
         title: const Text(
-          "AI Assessment",
+          "AI Skills Certification",
           style: TextStyle(
-            color: primaryPurple,
-            fontWeight: FontWeight.bold,
-            fontSize: 20,
+            color: Color(0xFF1E1B29),
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
           ),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
       ),
       body: _isLoading
-          ? const Center(
+          ? Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(color: primaryPurple),
-            SizedBox(height: 16),
-            Text(
-              "AI is generating tailored questions & duration...",
-              style: TextStyle(color: Colors.black54),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: primaryPurple.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const CircularProgressIndicator(color: primaryPurple, strokeWidth: 3),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              "Generating Ultra-Adaptive Assessment...",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1E1B29)),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              "Analyzing uploaded certificate credentials with AI",
+              style: TextStyle(color: Colors.black54, fontSize: 13),
             ),
           ],
         ),
       )
           : SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
+        padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Center(
-              child: SizedBox(
-                height: 160,
-                width: 200,
-                child: Image.asset(
-                  'assets/ai robot.png',
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const Icon(
-                      Icons.smart_toy_outlined,
-                      size: 100,
-                      color: primaryPurple,
-                    );
-                  },
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: primaryPurple.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
                 ),
+                child: const Icon(Icons.psychology_rounded, size: 80, color: primaryPurple),
               ),
             ),
-            const SizedBox(height: 12),
-
+            const SizedBox(height: 20),
             const Text(
-              "AI Skill Assessment",
+              "Adaptive Knowledge Test",
               style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF1E1B29),
               ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Text(
-                "Based on your uploaded certificate, our AI will evaluate your practical knowledge through an adaptive assessment",
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontSize: 12.5,
-                  height: 1.4,
-                ),
-                textAlign: TextAlign.center,
-              ),
+            Text(
+              "This test dynamically measures practical skill depth, architectural concepts, and scenario problems based on your verified background.",
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 13, height: 1.4),
+              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 20),
-
+            const SizedBox(height: 24),
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 18,
-                vertical: 16,
-              ),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFFF9F9FF),
-                borderRadius: BorderRadius.circular(16),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.03),
@@ -165,115 +153,95 @@ class _AssessmentIntroScreenState extends State<AssessmentIntroScreen> {
                 ],
               ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildInfoRow(
-                    iconPath: Icons.bar_chart_rounded,
+                    icon: Icons.bar_chart_rounded,
                     iconColor: Colors.orangeAccent,
                     bgColor: const Color(0xFFFFF4E5),
-                    label: "Difficulty",
-                    value: _quizData?.difficulty ?? "Adaptive (Easy → Hard)",
+                    label: "Difficulty Level",
+                    value: _quizData?.difficulty ?? "Multi-Tiered Adaptive",
                   ),
-                  const SizedBox(height: 16),
+                  const Divider(height: 24),
                   _buildInfoRow(
-                    iconPath: Icons.help_outline_rounded,
+                    icon: Icons.quiz_outlined,
                     iconColor: Colors.purpleAccent,
                     bgColor: const Color(0xFFF2E9FC),
-                    label: "Total Questions",
-                    value: "${_quizData?.questions.length ?? 10} Questions",
+                    label: "Question Breakdown",
+                    value: "${_quizData?.questions.length ?? 10} Dynamic Questions",
                   ),
-                  const SizedBox(height: 16),
+                  const Divider(height: 24),
                   _buildInfoRow(
-                    iconPath: Icons.access_time_rounded,
+                    icon: Icons.timer_outlined,
                     iconColor: Colors.blueAccent,
                     bgColor: const Color(0xFFE8F1FF),
-                    label: "Duration",
+                    label: "Estimated Duration",
                     value: "${(_quizData?.questions.length ?? 10) * 1} Minutes",
                   ),
-                  const SizedBox(height: 16),
+                  const Divider(height: 24),
                   _buildInfoRow(
-                    iconPath: Icons.assignment_turned_in_outlined,
+                    icon: Icons.verified_outlined,
                     iconColor: primaryPurple,
                     bgColor: const Color(0xFFEEEBFF),
-                    label: "Passing Score",
+                    label: "Passing Score Required",
                     value: "60%",
                   ),
                 ],
               ),
             ),
+            const SizedBox(height: 28),
+            SizedBox(
+              height: 54,
+              child: ElevatedButton(
+                onPressed: () async {
+                  if (_quizData == null) return;
+                  try {
+                    final user = FirebaseAuth.instance.currentUser;
+                    if (user == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Please login again.")),
+                      );
+                      return;
+                    }
 
-            const SizedBox(height: 24),
+                    final String sessionId = await FirestoreService().createAssessmentSession(
+                      userId: user.uid,
+                      skillName: widget.skillName,
+                    );
 
-            ElevatedButton(
-              onPressed: () async {
-                if (_quizData == null) return;
-
-                try {
-                  final user = FirebaseAuth.instance.currentUser;
-
-                  if (user == null) {
                     if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("Please login again."),
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => QuizScreen(
+                          quizData: _quizData!,
+                          skillName: widget.skillName,
+                          sessionId: sessionId,
+                          userId: user.uid,
+                        ),
                       ),
                     );
-                    return;
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Failed to start assessment: $e")),
+                    );
                   }
-
-                  final String sessionId =
-                  await FirestoreService().createAssessmentSession(
-                    userId: user.uid,
-                    skillName: widget.skillName,
-                  );
-
-                  if (!context.mounted) return;
-
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => QuizScreen(
-                        quizData: _quizData!,
-                        skillName: widget.skillName,
-                        sessionId: sessionId,
-                        userId: user.uid,
-                      ),
-                    ),
-                  );
-                } catch (e) {
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text("Failed to start assessment.\n$e"),
-                    ),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryPurple,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryPurple,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text("Begin Assessment Now", style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
+                    SizedBox(width: 8),
+                    Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 20),
+                  ],
                 ),
               ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    "Start Assessment",
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 22),
-                ],
-              ),
             ),
-            const SizedBox(height: 12),
           ],
         ),
       ),
@@ -281,7 +249,7 @@ class _AssessmentIntroScreenState extends State<AssessmentIntroScreen> {
   }
 
   Widget _buildInfoRow({
-    required IconData iconPath,
+    required IconData icon,
     required Color iconColor,
     required Color bgColor,
     required String label,
@@ -291,31 +259,14 @@ class _AssessmentIntroScreenState extends State<AssessmentIntroScreen> {
       children: [
         Container(
           padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: bgColor,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(iconPath, color: iconColor, size: 20),
+          decoration: BoxDecoration(color: bgColor, shape: BoxShape.circle),
+          child: Icon(icon, color: iconColor, size: 20),
         ),
         const SizedBox(width: 14),
         Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w500,
-              color: Colors.black87,
-            ),
-          ),
+          child: Text(label, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: Colors.black87)),
         ),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 13.5,
-            fontWeight: FontWeight.bold,
-            color: Colors.black,
-          ),
-        ),
+        Text(value, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black)),
       ],
     );
   }

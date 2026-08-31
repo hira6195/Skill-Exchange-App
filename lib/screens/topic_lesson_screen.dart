@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:skill_exchange/services/gemini_service.dart'; // Gemini Service کا پاتھ
+import 'package:skill_exchange/services/gemini_service.dart';
 
 class TopicLessonScreen extends StatefulWidget {
   final String skillName;
   final String topicName;
+  final String category;
 
   const TopicLessonScreen({
     super.key,
     required this.skillName,
     required this.topicName,
+    required this.category,
   });
 
   @override
@@ -18,6 +20,7 @@ class TopicLessonScreen extends StatefulWidget {
 class _TopicLessonScreenState extends State<TopicLessonScreen> {
   bool _isLoading = true;
   String _lessonText = "";
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -26,21 +29,29 @@ class _TopicLessonScreenState extends State<TopicLessonScreen> {
   }
 
   Future<void> _loadAITopicLesson() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
       final lessonContent = await GeminiService.instance.generateTopicLesson(
         widget.skillName,
         widget.topicName,
       );
-      setState(() {
-        _lessonText = lessonContent;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _lessonText = lessonContent;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _lessonText = "Error loading lesson. Please try again.";
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -85,7 +96,7 @@ class _TopicLessonScreenState extends State<TopicLessonScreen> {
                       const Icon(Icons.psychology, color: Colors.white, size: 20),
                       const SizedBox(width: 8),
                       Text(
-                        widget.skillName,
+                        "${widget.category} • ${widget.skillName}",
                         style: const TextStyle(color: Colors.white70, fontSize: 13),
                       ),
                     ],
@@ -115,9 +126,41 @@ class _TopicLessonScreenState extends State<TopicLessonScreen> {
                     SizedBox(height: 16),
                     Text(
                       "AI Tutor is preparing your lesson...",
-                      style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ],
+                ),
+              )
+                  : _errorMessage != null
+                  ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline,
+                          size: 48, color: Colors.redAccent),
+                      const SizedBox(height: 12),
+                      SelectableText(
+                        "Error: $_errorMessage",
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.redAccent),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xff6A1B9A),
+                        ),
+                        onPressed: _loadAITopicLesson,
+                        icon: const Icon(Icons.refresh, color: Colors.white),
+                        label: const Text("Try Again",
+                            style: TextStyle(color: Colors.white)),
+                      ),
+                    ],
+                  ),
                 ),
               )
                   : SingleChildScrollView(

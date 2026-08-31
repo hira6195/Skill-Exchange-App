@@ -1,0 +1,16 @@
+{
+  "name": "skill-exchange-backend",
+  "version": "1.0.0",
+  "description": "Backend for Skill Exchange email verification",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "firebase-admin": "^14.2.0",
+    "nodemailer": "^7.0.6"
+  }
+}

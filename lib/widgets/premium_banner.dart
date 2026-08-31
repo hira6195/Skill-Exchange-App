@@ -26,22 +26,23 @@ class PremiumBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.purple.shade900.withOpacity(0.3),
+            color: Colors.purple.shade900.withValues(alpha: 0.3),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),
         ],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min, // Dialog size adjustment
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header Row with Crown Icon
+          // Header Row with Crown Icon & Close Button
           Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.amber.shade400.withOpacity(0.2),
+                  color: Colors.amber.shade400.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -51,31 +52,40 @@ class PremiumBanner extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'SkillExchange PRO',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'SkillExchange PRO',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
-                  Text(
-                    'Unlock maximum potential',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white70,
+                    Text(
+                      'Unlock unlimited skills & perks',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white70,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+              ),
+              // Close Button
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                onPressed: () => Navigator.pop(context),
               ),
             ],
           ),
           const SizedBox(height: 16),
 
           // Features List
+          _buildFeatureRow(Icons.all_inclusive_rounded, 'Select Unlimited Skills'),
+          const SizedBox(height: 8),
           _buildFeatureRow(Icons.bolt, 'Priority Matching'),
           const SizedBox(height: 8),
           _buildFeatureRow(Icons.chat_bubble_outline_rounded, 'Unlimited Chat'),
@@ -88,7 +98,12 @@ class PremiumBanner extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: onUpgradePressed,
+              onPressed: () {
+                Navigator.pop(context); // Close dialog
+                if (onUpgradePressed != null) {
+                  onUpgradePressed!();
+                }
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.amber.shade400,
                 foregroundColor: Colors.black87,
@@ -123,7 +138,7 @@ class PremiumBanner extends StatelessWidget {
         const SizedBox(width: 10),
         Text(
           label,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
             color: Colors.white70,

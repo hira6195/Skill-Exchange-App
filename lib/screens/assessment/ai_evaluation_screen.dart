@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/assessment_service.dart';
 
-// Local Model Definition to avoid import errors
 class AssessmentResult {
   final double score;
   final String skillLevel;
@@ -41,7 +40,6 @@ class _AiEvaluationScreenState extends State<AiEvaluationScreen> {
   AssessmentResult? _result;
   String _errorMessage = "";
 
-  // Dynamic Analysis Fields
   final List<String> _strongTopics = [];
   final List<String> _weakTopics = [];
 
@@ -55,10 +53,8 @@ class _AiEvaluationScreenState extends State<AiEvaluationScreen> {
     try {
       final AssessmentService service = AssessmentService();
 
-      // Dynamic calculation
       _extractTopicsAnalysis();
 
-      // If service evaluation is available
       final result = await service.evaluateAssessment(
         sessionId: widget.sessionId,
         userId: widget.userId,
@@ -68,19 +64,17 @@ class _AiEvaluationScreenState extends State<AiEvaluationScreen> {
 
       if (mounted) {
         setState(() {
-          // If service returns custom object or map, convert/assign
           if (result is AssessmentResult) {
             _result = result as AssessmentResult?;
           } else {
-            // Local calculation fallback if service format differs
             double calcScore = _calculateScore();
             _result = AssessmentResult(
               score: calcScore,
               skillLevel: _getSkillLevel(calcScore),
               isPassed: calcScore >= 70,
               feedback: calcScore >= 70
-                  ? "Great performance! You demonstrated good technical competence."
-                  : "Needs improvement. Please review weak conceptual areas.",
+                  ? "Great performance! You demonstrated good technical competence across dynamic problem-solving."
+                  : "Needs improvement. Please review weak conceptual and scenario-based areas.",
             );
           }
           _isEvaluating = false;
@@ -88,7 +82,6 @@ class _AiEvaluationScreenState extends State<AiEvaluationScreen> {
       }
     } catch (e) {
       if (mounted) {
-        // Fallback gracefully on evaluation error
         double calcScore = _calculateScore();
         setState(() {
           _result = AssessmentResult(
@@ -107,14 +100,15 @@ class _AiEvaluationScreenState extends State<AiEvaluationScreen> {
     if (widget.questionsWithUserAnswers.isEmpty) return 0.0;
     int correct = 0;
     for (var q in widget.questionsWithUserAnswers) {
-      if (q['type'] == 'MCQ') {
+      String type = (q['type'] ?? 'mcq').toString().toLowerCase();
+      if (type == 'mcq') {
         if (q['selectedOptionIndex'] != null &&
             q['selectedOptionIndex'] == q['correctOptionIndex']) {
           correct++;
         }
       } else {
-        String ans = (q['shortAnswerText'] ?? '').toString().trim();
-        if (ans.length > 10) correct++;
+        String ans = (q['shortAnswerText'] ?? q['selectedOptionText'] ?? '').toString().trim();
+        if (ans.length > 15) correct++;
       }
     }
     return (correct / widget.questionsWithUserAnswers.length) * 100;
@@ -122,7 +116,7 @@ class _AiEvaluationScreenState extends State<AiEvaluationScreen> {
 
   String _getSkillLevel(double score) {
     if (score >= 80) return 'Expert';
-    if (score >= 50) return 'Intermediate';
+    if (score >= 70) return 'Intermediate';
     return 'Beginner';
   }
 
@@ -131,15 +125,16 @@ class _AiEvaluationScreenState extends State<AiEvaluationScreen> {
     Map<String, int> correctPerTopic = {};
 
     for (var q in widget.questionsWithUserAnswers) {
-      String topic = q['topic'] ?? 'General';
+      String topic = q['topic'] ?? 'General Mechanics';
       totalPerTopic[topic] = (totalPerTopic[topic] ?? 0) + 1;
 
       bool isCorrect = false;
-      if (q['type'] == 'MCQ') {
+      String type = (q['type'] ?? 'mcq').toString().toLowerCase();
+      if (type == 'mcq') {
         isCorrect = q['selectedOptionIndex'] != null &&
             q['selectedOptionIndex'] == q['correctOptionIndex'];
       } else {
-        String ans = (q['shortAnswerText'] ?? '').toString().trim();
+        String ans = (q['shortAnswerText'] ?? q['selectedOptionText'] ?? '').toString().trim();
         isCorrect = ans.length > 15;
       }
 
@@ -183,10 +178,10 @@ class _AiEvaluationScreenState extends State<AiEvaluationScreen> {
           children: [
             const CircularProgressIndicator(color: primaryPurple),
             const SizedBox(height: 20),
-            const Text("AI is analyzing performance across topics...",
+            const Text("AI is evaluating performance across topics...",
                 style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
-            Text("Evaluating difficulty & domain expertise",
+            Text("Analyzing MCQs, Scenarios, & Short Code Answers",
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
           ],
         ),
@@ -198,21 +193,18 @@ class _AiEvaluationScreenState extends State<AiEvaluationScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 1. TOP CARD: Pass Status & Skill Level Badge
             _buildHeaderCard(),
             const SizedBox(height: 16),
 
-            // 2. METRICS ROW: Score & Accuracy
             Row(
               children: [
                 Expanded(child: _buildMetricTile("Score", "${_result!.score.toStringAsFixed(1)}%", Icons.stars_rounded, Colors.orange)),
                 const SizedBox(width: 12),
-                Expanded(child: _buildMetricTile("Accuracy", "${_result!.score.toStringAsFixed(0)}%", Icons.bolt_rounded, Colors.purple)),
+                Expanded(child: _buildMetricTile("Total Qs", "${widget.questionsWithUserAnswers.length}", Icons.quiz_rounded, Colors.purple)),
               ],
             ),
             const SizedBox(height: 16),
 
-            // 3. STRONG vs WEAK TOPICS SECTION
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
@@ -229,7 +221,6 @@ class _AiEvaluationScreenState extends State<AiEvaluationScreen> {
             ),
             const SizedBox(height: 16),
 
-            // 4. AI FEEDBACK CARD
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
@@ -257,7 +248,6 @@ class _AiEvaluationScreenState extends State<AiEvaluationScreen> {
             ),
             const SizedBox(height: 16),
 
-            // 5. CERTIFICATE ELIGIBILITY CARD
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -288,7 +278,7 @@ class _AiEvaluationScreenState extends State<AiEvaluationScreen> {
                         const SizedBox(height: 2),
                         Text(
                           _result!.isPassed
-                              ? "Congratulations! Your skill badge has been added to your profile."
+                              ? "Congratulations! Your skill badge has been verified."
                               : "You didn't reach the 70% threshold. Review weak topics and retry.",
                           style: TextStyle(
                             fontSize: 12,
@@ -301,26 +291,10 @@ class _AiEvaluationScreenState extends State<AiEvaluationScreen> {
                 ],
               ),
             ),
-
             const SizedBox(height: 24),
 
-            // 6. ACTION BUTTONS
             Column(
               children: [
-                OutlinedButton.icon(
-                  onPressed: () {
-                    // TODO: Review Answers action
-                  },
-                  icon: const Icon(Icons.analytics_outlined, color: primaryPurple),
-                  label: const Text("Review Answers & Explanations", style: TextStyle(color: primaryPurple, fontWeight: FontWeight.bold)),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 50),
-                    side: const BorderSide(color: primaryPurple, width: 1.5),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
                 if (!_result!.isPassed) ...[
                   ElevatedButton.icon(
                     onPressed: () {

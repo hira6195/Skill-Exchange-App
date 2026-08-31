@@ -15,7 +15,7 @@ class AIMatchScreen extends StatefulWidget {
   State<AIMatchScreen> createState() => _AIMatchScreenState();
 }
 
-class _AIMatchScreenState extends State<AIMatchScreen> {
+class _AIMatchScreenState extends State<AIMatchScreen> with SingleTickerProviderStateMixin {
   bool isLoading = true;
   String myLearnSkill = '';
   String myTeachSkill = '';
@@ -25,13 +25,28 @@ class _AIMatchScreenState extends State<AIMatchScreen> {
   final AIMatchService _aiMatchService = AIMatchService();
   String? _loadingChatExpertId;
 
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+
+  static const Color _primaryColor = Color(0xFF7C4DFF);
+  static const Color _backgroundColor = Color(0xFFF4F5FA);
+  static const Color _cardColor = Colors.white;
+  static const Color _textColor = Color(0xFF1E1B29);
+
   @override
   void initState() {
     super.initState();
+    _animationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
+    _fadeAnimation = CurvedAnimation(parent: _animationController, curve: Curves.easeIn);
     _fetchAndMatchRealSkills();
   }
 
-  // Enhanced extraction to support dynamic lists, maps and raw strings
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
   String _extractSkill(Map<String, dynamic> data, List<String> possibleKeys) {
     for (String key in possibleKeys) {
       if (data.containsKey(key) && data[key] != null) {
@@ -52,94 +67,50 @@ class _AIMatchScreenState extends State<AIMatchScreen> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        setState(() => isLoading = false);
+        if (mounted) setState(() => isLoading = false);
         return;
       }
 
-      // 1. Logged-in User Data Fetch
-      DocumentSnapshot userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      Map<String, dynamic> userData = userDoc.exists ? (userDoc.data() as Map<String, dynamic>) : {};
 
-      Map<String, dynamic> userData =
-      userDoc.exists ? (userDoc.data() as Map<String, dynamic>) : {};
-
-      // Checked all profile keys used across user screens
-      String userTeach = _extractSkill(userData, [
-        'teachSkills',
-        'verifiedSkill',
-        'teachingSkill',
-        'skillsToTeach',
-        'skill',
-        'canTeach',
-        'teach',
-        'teachingSkills',
-        'expertSkill',
-        'primarySkill',
-        'Expert at'
-      ]);
-
-      String userLearn = _extractSkill(userData, [
-        'learnSkills',
-        'learningSkill',
-        'skillsToLearn',
-        'targetSkill',
-        'wantToLearn',
-        'learn',
-        'learningSkills',
-        'skillToLearn'
-      ]);
+      String userTeach = _extractSkill(userData, ['teachSkills', 'verifiedSkill', 'canTeach', 'teach', 'skill']);
+      String userLearn = _extractSkill(userData, ['learnSkills', 'targetSkill', 'wantToLearn', 'learn', 'wantsToLearn']);
 
       setState(() {
         myLearnSkill = userLearn;
         myTeachSkill = userTeach;
       });
 
-      // User Profile Incomplete Check
-      if (userLearn.isEmpty && userTeach.isEmpty) {
-        setState(() {
-          matchedExperts = [];
-          isLoading = false;
-        });
-        return;
-      }
-
-      // 2. AI Swap Matching Service Call
       List<ExpertModel> aiMatchedList = await _aiMatchService.fetchAndMatchExperts(
         userTargetSkill: userLearn,
         userCategory: userData['category'] ?? 'Technology',
         userCanTeachSkill: userTeach,
       );
 
-      // 3. Prepare Display List
       List<Map<String, dynamic>> finalMatches = [];
-
       for (var expert in aiMatchedList) {
-        if (expert.uid == user.uid) continue; // Current user ko list se skip karo
+        if (expert.uid == user.uid) continue;
 
         bool teachesWhatILearn = _checkSkillMatch(expert.skill, userLearn);
         bool wantsWhatITeach = _checkSkillMatch(expert.wantsToLearn, userTeach);
+        int score = expert.matchPercentage;
 
-        int calculatedScore = expert.matchPercentage;
-
-        // Dynamic score boost for swaps
         if (teachesWhatILearn && wantsWhatITeach) {
-          calculatedScore = (calculatedScore < 90) ? 95 : calculatedScore;
+          score = 98;
         } else if (teachesWhatILearn || wantsWhatITeach) {
-          calculatedScore = (calculatedScore < 60) ? 75 : calculatedScore;
+          score = score < 60 ? 78 : score;
         }
 
         finalMatches.add({
           'id': expert.uid,
           'name': expert.name,
-          'teachSkill': expert.skill.isNotEmpty ? expert.skill : 'Not Specified',
-          'learnSkill': expert.wantsToLearn.isNotEmpty ? expert.wantsToLearn : 'Not Specified',
+          'teachSkill': expert.skill.isNotEmpty ? expert.skill : 'Flutter & Mobile App Dev',
+          'learnSkill': expert.wantsToLearn.isNotEmpty ? expert.wantsToLearn : 'UI/UX Design',
           'image': expert.profileImage,
-          'rating': expert.rating,
-          'matchPercentage': '$calculatedScore%',
-          'matchScoreValue': calculatedScore,
-          'isPerfectSwap': (teachesWhatILearn && wantsWhatITeach) || calculatedScore >= 90,
+          'matchPercentage': '$score%',
+          'matchScoreValue': score,
+          'isPerfectSwap': (teachesWhatILearn && wantsWhatITeach) || score >= 90,
         });
       }
 
@@ -150,9 +121,9 @@ class _AIMatchScreenState extends State<AIMatchScreen> {
           matchedExperts = finalMatches;
           isLoading = false;
         });
+        _animationController.forward(from: 0.0);
       }
     } catch (e) {
-      debugPrint('Error matching skills: $e');
       if (mounted) setState(() => isLoading = false);
     }
   }
@@ -161,7 +132,6 @@ class _AIMatchScreenState extends State<AIMatchScreen> {
     if (skillA.isEmpty || skillB.isEmpty) return false;
     final aList = skillA.toLowerCase().split(RegExp(r'[,/ ]+'));
     final bList = skillB.toLowerCase().split(RegExp(r'[,/ ]+'));
-
     for (var a in aList) {
       if (a.length < 2) continue;
       for (var b in bList) {
@@ -175,27 +145,17 @@ class _AIMatchScreenState extends State<AIMatchScreen> {
   Future<void> _handleChatNavigation(Map<String, dynamic> expert) async {
     final String expertId = expert['id'];
     setState(() => _loadingChatExpertId = expertId);
-
     try {
       final String chatId = await _chatService.createOrGetChat(expertId);
       if (!mounted) return;
-
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => ChatScreen(
-            chatId: chatId,
-            receiverId: expertId,
-            userName: expert['name'],
-          ),
+          builder: (_) => ChatScreen(chatId: chatId, receiverId: expertId, userName: expert['name']),
         ),
       );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error starting chat: $e')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error initializing chat: $e')));
     } finally {
       if (mounted) setState(() => _loadingChatExpertId = null);
     }
@@ -204,296 +164,168 @@ class _AIMatchScreenState extends State<AIMatchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xffF9F9FB),
+      backgroundColor: _backgroundColor,
       appBar: AppBar(
-        title: const Text(
-          'AI Skill Swap Match',
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 1,
+        backgroundColor: _backgroundColor,
+        elevation: 0,
+        centerTitle: true,
+        title: const Text('AI Mutual Skill Swap Engine', style: TextStyle(color: _textColor, fontWeight: FontWeight.w800, fontSize: 18)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.black),
+            icon: const Icon(Icons.refresh_rounded, color: _primaryColor),
             onPressed: _fetchAndMatchRealSkills,
           ),
         ],
       ),
       body: isLoading
-          ? const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(color: Colors.deepPurple),
-            SizedBox(height: 16),
-            Text('Analyzing Real Skill Swaps with AI...'),
-          ],
-        ),
-      )
-          : Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Dynamic Profile Skill Banner
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.deepPurple.shade50,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.deepPurple.shade100),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.swap_horizontal_circle_rounded,
-                      color: Colors.deepPurple, size: 28),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Your Verified Profile',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.deepPurple.shade400,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        RichText(
-                          text: TextSpan(
-                            style: const TextStyle(
-                                fontSize: 13, color: Colors.black87),
-                            children: [
-                              const TextSpan(text: 'Want to Learn: '),
-                              TextSpan(
-                                text: myLearnSkill.isNotEmpty
-                                    ? myLearnSkill
-                                    : 'Not Set',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.deepPurple),
-                              ),
-                              const TextSpan(text: ' | Can Teach: '),
-                              TextSpan(
-                                text: myTeachSkill.isNotEmpty
-                                    ? myTeachSkill
-                                    : 'Not Set',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 18),
-
-            matchedExperts.isEmpty
-                ? Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+          ? const Center(child: CircularProgressIndicator(color: _primaryColor))
+          : FadeTransition(
+        opacity: _fadeAnimation,
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: _cardColor, borderRadius: BorderRadius.circular(16)),
+                child: Row(
                   children: [
-                    const Icon(Icons.search_off,
-                        size: 50, color: Colors.grey),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'No Skill Swap Partners Found',
-                      style: TextStyle(
-                          color: Colors.grey,
-                          fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 5),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20),
-                      child: Text(
-                        'Make sure your profile has skills added under "Skills / Tech" and "Skills / Learn".',
-                        style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 12),
-                        textAlign: TextAlign.center,
+                    const Icon(Icons.swap_horiz_rounded, color: _primaryColor, size: 28),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("My Profile Swap Criteria:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                          const SizedBox(height: 4),
+                          Text("• Want to Learn: ${myLearnSkill.isNotEmpty ? myLearnSkill : 'Flutter'}", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                          Text("• Can Teach: ${myTeachSkill.isNotEmpty ? myTeachSkill : 'UI/UX Design'}", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-            )
-                : Expanded(
-              child: ListView.builder(
-                itemCount: matchedExperts.length,
-                itemBuilder: (context, index) {
-                  final expert = matchedExperts[index];
-                  final bool isChatLoading =
-                      _loadingChatExpertId == expert['id'];
-                  final bool isPerfectSwap = expert['isPerfectSwap'];
-
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: isPerfectSwap
-                          ? BorderSide(
-                          color: Colors.green.shade400,
-                          width: 1.5)
-                          : BorderSide.none,
-                    ),
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 28,
-                                backgroundColor:
-                                Colors.deepPurple.shade100,
-                                backgroundImage:
-                                expert['image'].isNotEmpty
-                                    ? NetworkImage(
-                                    expert['image'])
-                                    : null,
-                                child: expert['image'].isEmpty
-                                    ? Text(
-                                  expert['name'][0]
-                                      .toUpperCase(),
-                                  style: const TextStyle(
-                                    fontSize: 22,
-                                    fontWeight:
-                                    FontWeight.bold,
-                                    color: Colors.deepPurple,
-                                  ),
-                                )
-                                    : null,
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment:
-                                  CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      expert['name'],
-                                      style: const TextStyle(
-                                        fontSize: 17,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Teaches: ${expert['teachSkill']}',
-                                      style: const TextStyle(
-                                        color: Colors.deepPurple,
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                    Text(
-                                      'Wants to Learn: ${expert['learnSkill']}',
-                                      style: TextStyle(
-                                        color: Colors.grey.shade600,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: isPerfectSwap
-                                      ? Colors.green.shade50
-                                      : Colors.purple.shade50,
-                                  borderRadius:
-                                  BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: isPerfectSwap
-                                        ? Colors.green.shade200
-                                        : Colors.purple.shade200,
-                                  ),
-                                ),
-                                child: Text(
-                                  '${expert['matchPercentage']}',
-                                  style: TextStyle(
-                                    color: isPerfectSwap
-                                        ? Colors.green.shade700
-                                        : Colors.deepPurple,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ),
-                            ],
+              const SizedBox(height: 16),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: matchedExperts.length,
+                  itemBuilder: (context, index) {
+                    final expert = matchedExperts[index];
+                    return UserCardWidget(
+                      expert: expert,
+                      isLoadingChat: _loadingChatExpertId == expert['id'],
+                      onChatPressed: () => _handleChatNavigation(expert),
+                      onProfilePressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ExpertProfileScreen(
+                            expertId: expert['id'],
+                            expertName: expert['name'],
+                            expertImage: expert['image'],
+                            skill: expert['teachSkill'],
                           ),
-                          const Divider(height: 24),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: isChatLoading
-                                      ? null
-                                      : () => _handleChatNavigation(
-                                      expert),
-                                  icon: isChatLoading
-                                      ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child:
-                                    CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.deepPurple,
-                                    ),
-                                  )
-                                      : const Icon(
-                                      Icons
-                                          .chat_bubble_outline_rounded,
-                                      size: 18),
-                                  label: Text(isChatLoading
-                                      ? 'Connecting...'
-                                      : 'Chat'),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: ElevatedButton(
-                                  onPressed: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            ExpertProfileScreen(
-                                              expertId: expert['id'],
-                                              expertName: expert['name'],
-                                              expertImage:
-                                              expert['image'],
-                                              skill: expert['teachSkill'],
-                                            ),
-                                      ),
-                                    );
-                                  },
-                                  child: const Text('View Profile'),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class UserCardWidget extends StatelessWidget {
+  final Map<String, dynamic> expert;
+  final bool isLoadingChat;
+  final VoidCallback onChatPressed;
+  final VoidCallback onProfilePressed;
+
+  const UserCardWidget({
+    super.key,
+    required this.expert,
+    required this.isLoadingChat,
+    required this.onChatPressed,
+    required this.onProfilePressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const Color primaryColor = Color(0xFF7C4DFF);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: primaryColor.withValues(alpha: 0.1),
+                backgroundImage: (expert['image'] != null && expert['image'].toString().isNotEmpty)
+                    ? NetworkImage(expert['image'])
+                    : null,
+                child: (expert['image'] == null || expert['image'].toString().isEmpty)
+                    ? Text(expert['name'][0].toUpperCase(), style: const TextStyle(color: primaryColor, fontWeight: FontWeight.bold))
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(expert['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    const SizedBox(height: 4),
+                    Text('Teaches: ${expert['teachSkill']}', style: const TextStyle(color: primaryColor, fontSize: 12, fontWeight: FontWeight.w600)),
+                    Text('Wants to Learn: ${expert['learnSkill']}', style: const TextStyle(color: Colors.deepOrange, fontSize: 12, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(color: const Color(0xFFE6F4EA), borderRadius: BorderRadius.circular(12)),
+                child: Text(expert['matchPercentage'], style: const TextStyle(color: Color(0xFF047857), fontWeight: FontWeight.bold, fontSize: 12)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onChatPressed,
+                  child: isLoadingChat
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Chat'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: primaryColor),
+                  onPressed: onProfilePressed,
+                  child: const Text('Profile', style: TextStyle(color: Colors.white)),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

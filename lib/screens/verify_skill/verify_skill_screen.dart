@@ -16,7 +16,37 @@ class _VerifySkillScreenState extends State<VerifySkillScreen> {
   final TextEditingController _skillController = TextEditingController();
 
   File? _selectedCertificate;
-  bool _isLoading = false;
+  bool _isLoading = true;
+  bool _isUploading = false;
+  bool _hasAlreadyVerified = false;
+  String _verificationStatus = ''; // 'pending', 'approved', 'rejected'
+  String _existingSkillName = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _checkExistingVerification();
+  }
+
+  /// Check Firestore for existing verification status
+  Future<void> _checkExistingVerification() async {
+    setState(() => _isLoading = true);
+    try {
+      final certData = await _certificateService.getUserVerificationStatus();
+      if (certData != null) {
+        setState(() {
+          _hasAlreadyVerified = true;
+          _verificationStatus = certData['status'] ?? 'pending';
+          _existingSkillName = certData['skillName'] ?? '';
+          _skillController.text = _existingSkillName;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error checking verification status: $e");
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
 
   /// Helper method to extract file name
   String _getFileName(String filePath) {
@@ -30,10 +60,19 @@ class _VerifySkillScreenState extends State<VerifySkillScreen> {
   }
 
   Future<void> _pickCertificate() async {
+    if (_hasAlreadyVerified && _verificationStatus != 'rejected') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Free Tier Limit: You have already submitted a certificate for verification."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     try {
       File? file = await _certificateService.pickCertificate();
       if (file != null) {
-        // Validate file extension for PDF / Word only
         if (_isValidDocument(file.path)) {
           setState(() {
             _selectedCertificate = file;
@@ -73,7 +112,6 @@ class _VerifySkillScreenState extends State<VerifySkillScreen> {
       return;
     }
 
-    // Double check file validation before upload
     if (!_isValidDocument(_selectedCertificate!.path)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -85,11 +123,11 @@ class _VerifySkillScreenState extends State<VerifySkillScreen> {
     }
 
     setState(() {
-      _isLoading = true;
+      _isUploading = true;
     });
 
     try {
-      // 1. Upload Certificate to Firebase / Storage
+      // 1. Upload Certificate & save to Firestore
       await _certificateService.uploadCertificate(
         skillName: skillName,
         certificate: _selectedCertificate!,
@@ -105,7 +143,9 @@ class _VerifySkillScreenState extends State<VerifySkillScreen> {
       if (!mounted) return;
 
       setState(() {
-        _isLoading = false;
+        _isUploading = false;
+        _hasAlreadyVerified = true;
+        _verificationStatus = 'pending';
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -126,17 +166,11 @@ class _VerifySkillScreenState extends State<VerifySkillScreen> {
         ),
       );
 
-      // Reset Form State
-      _skillController.clear();
-      setState(() {
-        _selectedCertificate = null;
-      });
-
     } catch (e) {
       if (!mounted) return;
 
       setState(() {
-        _isLoading = false;
+        _isUploading = false;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -148,6 +182,45 @@ class _VerifySkillScreenState extends State<VerifySkillScreen> {
     }
   }
 
+  Widget _buildStatusBanner() {
+    Color bannerColor = Colors.orange;
+    IconData icon = Icons.hourglass_top;
+    String message = "Your certificate is under review.";
+
+    if (_verificationStatus == 'approved') {
+      bannerColor = Colors.green;
+      icon = Icons.check_circle_outline;
+      message = "Skill verified successfully!";
+    } else if (_verificationStatus == 'rejected') {
+      bannerColor = Colors.red;
+      icon = Icons.error_outline;
+      message = "Certificate rejected. Please re-upload a valid document.";
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: bannerColor.withValues(alpha: 0.1),
+        border: Border.all(color: bannerColor),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: bannerColor, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: bannerColor, fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _skillController.dispose();
@@ -156,6 +229,17 @@ class _VerifySkillScreenState extends State<VerifySkillScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xff6A1B9A)),
+        ),
+      );
+    }
+
+    final bool isFormDisabled = _hasAlreadyVerified && _verificationStatus != 'rejected';
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -198,7 +282,9 @@ class _VerifySkillScreenState extends State<VerifySkillScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 35),
+                const SizedBox(height: 25),
+
+                if (_hasAlreadyVerified) _buildStatusBanner(),
 
                 GestureDetector(
                   onTap: _pickCertificate,
@@ -217,7 +303,7 @@ class _VerifySkillScreenState extends State<VerifySkillScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Icon(
-                          Icons.picture_as_pdf_rounded, // File Icon
+                          Icons.picture_as_pdf_rounded,
                           size: 60,
                           color: Color(0xff6A1B9A),
                         ),
@@ -272,6 +358,7 @@ class _VerifySkillScreenState extends State<VerifySkillScreen> {
 
                 TextField(
                   controller: _skillController,
+                  enabled: !isFormDisabled,
                   style: const TextStyle(color: Colors.black),
                   decoration: InputDecoration(
                     hintText: "UI/UX design",
@@ -284,19 +371,47 @@ class _VerifySkillScreenState extends State<VerifySkillScreen> {
                       borderRadius: BorderRadius.circular(14),
                       borderSide: BorderSide(color: Colors.grey.shade400),
                     ),
+                    disabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
                       borderSide: const BorderSide(color: Color(0xff6A1B9A), width: 1.5),
                     ),
                   ),
                 ),
-                const SizedBox(height: 50),
+                const SizedBox(height: 20),
+
+                if (isFormDisabled) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.amber.shade400),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.workspace_premium, color: Colors.amber, size: 20),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            "Free Plan Limit: You can only verify 1 skill in the free plan. Upgrade to Premium to verify more skills.",
+                            style: TextStyle(fontSize: 12, color: Colors.black87),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
 
                 SizedBox(
                   width: double.infinity,
                   height: 55,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _uploadCertificate,
+                    onPressed: (isFormDisabled || _isUploading) ? null : _uploadCertificate,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xff6A1B9A),
                       disabledBackgroundColor: Colors.grey.shade300,
@@ -305,7 +420,7 @@ class _VerifySkillScreenState extends State<VerifySkillScreen> {
                       ),
                       elevation: 0,
                     ),
-                    child: _isLoading
+                    child: _isUploading
                         ? const SizedBox(
                       height: 24,
                       width: 24,
@@ -314,10 +429,10 @@ class _VerifySkillScreenState extends State<VerifySkillScreen> {
                         strokeWidth: 2.5,
                       ),
                     )
-                        : const Text(
-                      "Upload Certificate",
+                        : Text(
+                      isFormDisabled ? "Already Submitted" : "Upload Certificate",
                       style: TextStyle(
-                        color: Colors.white,
+                        color: isFormDisabled ? Colors.grey.shade600 : Colors.white,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),

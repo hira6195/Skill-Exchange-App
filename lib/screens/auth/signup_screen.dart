@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:skill_exchange/screens/profile/profile_screen.dart';
+import 'package:skill_exchange/screens/email_verification_screen.dart';
+import 'package:skill_exchange/screens/auth/login_screen.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -15,33 +17,93 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-  final TextEditingController confirmPasswordController = TextEditingController();
+  final TextEditingController confirmPasswordController =
+  TextEditingController();
+
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   bool hidePassword = true;
   bool hideConfirmPassword = true;
   bool isLoading = false;
 
-  // Colors based on the provided UI design image
   final Color primaryPurple = const Color(0xff6C25A8);
   final Color fieldBgColor = const Color(0xffF3F4F6);
 
-  Future<void> signupUser() async {
-    String name = nameController.text.trim();
-    String email = emailController.text.trim();
-    String password = passwordController.text.trim();
-    String confirmPassword = confirmPasswordController.text.trim();
+  // ----------------------------------------------------------
+  // EMAIL VALIDATION
+  // ----------------------------------------------------------
 
-    if (name.isEmpty || email.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please fill all fields")),
-      );
+  bool isValidEmail(String email) {
+    return RegExp(
+      r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
+    ).hasMatch(email.trim());
+  }
+
+  // ----------------------------------------------------------
+  // PASSWORD VALIDATION
+  // ----------------------------------------------------------
+
+  String? validatePassword(String password) {
+    if (password.length < 8) {
+      return "Password must be at least 8 characters.";
+    }
+
+    if (!RegExp(r'[A-Z]').hasMatch(password)) {
+      return "Password must contain at least one uppercase letter.";
+    }
+
+    if (!RegExp(r'[a-z]').hasMatch(password)) {
+      return "Password must contain at least one lowercase letter.";
+    }
+
+    if (!RegExp(r'[0-9]').hasMatch(password)) {
+      return "Password must contain at least one number.";
+    }
+
+    if (!RegExp(r'[!@#$%^&*(),.?":{}|<>_\-]').hasMatch(password)) {
+      return "Password must contain at least one special character.";
+    }
+
+    return null;
+  }
+
+  // ----------------------------------------------------------
+  // SIGN UP
+  // ----------------------------------------------------------
+
+  Future<void> signupUser() async {
+    final String name = nameController.text.trim();
+    final String email = emailController.text.trim().toLowerCase();
+    final String password = passwordController.text;
+    final String confirmPassword = confirmPasswordController.text;
+
+    if (name.isEmpty ||
+        email.isEmpty ||
+        password.isEmpty ||
+        confirmPassword.isEmpty) {
+      showMessage("Please fill in all fields.", isError: true);
+      return;
+    }
+
+    if (name.length < 2) {
+      showMessage("Please enter your full name.", isError: true);
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      showMessage("Please enter a valid email address.", isError: true);
+      return;
+    }
+
+    final passwordError = validatePassword(password);
+    if (passwordError != null) {
+      showMessage(passwordError, isError: true);
       return;
     }
 
     if (password != confirmPassword) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Passwords do not match")),
-      );
+      showMessage("Passwords do not match.", isError: true);
       return;
     }
 
@@ -50,15 +112,26 @@ class _SignupScreenState extends State<SignupScreen> {
     });
 
     try {
-      UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      // 1. CREATE FIREBASE AUTH ACCOUNT
+      final UserCredential userCredential =
+      await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      String uid = userCredential.user!.uid;
+      final User? user = userCredential.user;
+      if (user == null) {
+        throw Exception("Unable to create account.");
+      }
 
-      await FirebaseFirestore.instance.collection("users").doc(uid).set({
-        "uid": uid,
+      // 2. SAVE DISPLAY NAME IN FIREBASE AUTH
+      await user.updateDisplayName(name);
+// 3. SEND FIREBASE VERIFICATION EMAIL
+      await user.sendEmailVerification();
+
+      // 4. CREATE FIRESTORE USER DOCUMENT
+      await _firestore.collection("users").doc(user.uid).set({
+        "uid": user.uid,
         "name": name,
         "email": email,
         "role": "Learner",
@@ -66,44 +139,59 @@ class _SignupScreenState extends State<SignupScreen> {
         "bio": "",
         "skills": [],
         "verified": false,
+        "isEmailVerified": false,
         "rating": 0,
         "totalSessions": 0,
         "isProfileCompleted": false,
+        "isPremium": false,
+        "subscriptionPlan": "Basic",
         "createdAt": FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Account Created Successfully")),
-      );
-
+      // 5. GO TO EMAIL VERIFICATION SCREEN
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (context) => const ProfileScreen()),
+        MaterialPageRoute(
+          builder: (context) => const EmailVerificationScreen(),
+        ),
             (route) => false,
       );
-
     } on FirebaseAuthException catch (e) {
+      debugPrint("FIREBASE AUTH ERROR: [${e.code}] ${e.message}");
       if (!mounted) return;
+
       String message;
       switch (e.code) {
         case "email-already-in-use":
-          message = "Email already exists.";
-          break;
-        case "weak-password":
-          message = "Password should be at least 6 characters.";
+          message = "An account already exists with this email address.";
           break;
         case "invalid-email":
-          message = "Invalid email address.";
+          message = "Please enter a valid email address.";
+          break;
+        case "weak-password":
+          message = "Password is too weak. Please use a stronger password.";
+          break;
+        case "operation-not-allowed":
+          message = "Email/password authentication is currently disabled.";
+          break;
+        case "network-request-failed":
+          message = "Network error. Please check your internet connection.";
+          break;
+        case "too-many-requests":
+          message = "Too many attempts. Please wait and try again.";
           break;
         default:
-          message = e.message ?? "Signup Failed";
+          message = e.message ?? "Unable to create your account.";
       }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+
+      showMessage(message, isError: true);
     } catch (e) {
+      debugPrint("FULL SIGNUP ERROR: $e");
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+
+      showMessage("Error: ${e.toString()}", isError: true);
     } finally {
       if (mounted) {
         setState(() {
@@ -113,6 +201,29 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
+  // ----------------------------------------------------------
+  // MESSAGE
+  // ----------------------------------------------------------
+
+  void showMessage(
+      String message, {
+        bool isError = false,
+      }) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor:
+        isError ? Colors.red.shade700 : Colors.green.shade700,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // ----------------------------------------------------------
+  // BUILD
+  // ----------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -121,7 +232,11 @@ class _SignupScreenState extends State<SignupScreen> {
         height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xff2B59C3), Color(0xff8838BD), Color(0xff9B33B7)],
+            colors: [
+              Color(0xff2B59C3),
+              Color(0xff8838BD),
+              Color(0xff9B33B7),
+            ],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -129,9 +244,15 @@ class _SignupScreenState extends State<SignupScreen> {
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 20,
+              ),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 32,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(28),
@@ -162,44 +283,61 @@ class _SignupScreenState extends State<SignupScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      "Join to continue your learning journey",
+                      "Join Skill Exchange and start learning",
+                      textAlign: TextAlign.center,
                       style: GoogleFonts.poppins(
                         fontSize: 13,
                         color: Colors.grey.shade600,
                       ),
                     ),
                     const SizedBox(height: 28),
-
                     buildInputField(
                       controller: nameController,
                       hint: "Full Name",
-                      icon: Icons.person,
+                      icon: Icons.person_outline,
+                      keyboardType: TextInputType.name,
                     ),
                     const SizedBox(height: 14),
-
                     buildInputField(
                       controller: emailController,
-                      hint: "Email",
-                      icon: Icons.email,
+                      hint: "Email Address",
+                      icon: Icons.email_outlined,
+                      keyboardType: TextInputType.emailAddress,
                     ),
                     const SizedBox(height: 14),
-
                     buildPasswordField(
                       controller: passwordController,
                       hint: "Password",
                       hideText: hidePassword,
-                      onToggle: () => setState(() => hidePassword = !hidePassword),
+                      onToggle: () {
+                        setState(() {
+                          hidePassword = !hidePassword;
+                        });
+                      },
                     ),
                     const SizedBox(height: 14),
-
                     buildPasswordField(
                       controller: confirmPasswordController,
                       hint: "Confirm Password",
                       hideText: hideConfirmPassword,
-                      onToggle: () => setState(() => hideConfirmPassword = !hideConfirmPassword),
+                      onToggle: () {
+                        setState(() {
+                          hideConfirmPassword = !hideConfirmPassword;
+                        });
+                      },
                     ),
-                    const SizedBox(height: 28),
-
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        "Password: 8+ characters, uppercase, lowercase, number & special character",
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                     SizedBox(
                       width: double.infinity,
                       height: 52,
@@ -213,9 +351,16 @@ class _SignupScreenState extends State<SignupScreen> {
                           ),
                         ),
                         child: isLoading
-                            ? const CircularProgressIndicator(color: Colors.white)
+                            ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
                             : Text(
-                          "Sign Up",
+                          "Create Account",
                           style: GoogleFonts.poppins(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -225,7 +370,6 @@ class _SignupScreenState extends State<SignupScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
-
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -237,7 +381,14 @@ class _SignupScreenState extends State<SignupScreen> {
                           ),
                         ),
                         GestureDetector(
-                          onTap: () => Navigator.pop(context),
+                          onTap: () {
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const LoginScreen(),
+                              ),
+                            );
+                          },
                           child: Text(
                             "Login",
                             style: GoogleFonts.poppins(
@@ -259,18 +410,32 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
+  // ----------------------------------------------------------
+  // INPUT FIELD
+  // ----------------------------------------------------------
+
   Widget buildInputField({
     required TextEditingController controller,
     required String hint,
     required IconData icon,
+    required TextInputType keyboardType,
   }) {
     return TextField(
       controller: controller,
+      keyboardType: keyboardType,
+      textInputAction: TextInputAction.next,
       style: GoogleFonts.poppins(fontSize: 14),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: GoogleFonts.poppins(color: Colors.grey.shade500, fontSize: 14),
-        prefixIcon: Icon(icon, color: primaryPurple, size: 20),
+        hintStyle: GoogleFonts.poppins(
+          color: Colors.grey.shade500,
+          fontSize: 14,
+        ),
+        prefixIcon: Icon(
+          icon,
+          color: primaryPurple,
+          size: 20,
+        ),
         filled: true,
         fillColor: fieldBgColor,
         contentPadding: const EdgeInsets.symmetric(vertical: 16),
@@ -282,6 +447,10 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
+  // ----------------------------------------------------------
+  // PASSWORD FIELD
+  // ----------------------------------------------------------
+
   Widget buildPasswordField({
     required TextEditingController controller,
     required String hint,
@@ -291,11 +460,19 @@ class _SignupScreenState extends State<SignupScreen> {
     return TextField(
       controller: controller,
       obscureText: hideText,
+      textInputAction: TextInputAction.next,
       style: GoogleFonts.poppins(fontSize: 14),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: GoogleFonts.poppins(color: Colors.grey.shade500, fontSize: 14),
-        prefixIcon: Icon(Icons.lock, color: primaryPurple, size: 20),
+        hintStyle: GoogleFonts.poppins(
+          color: Colors.grey.shade500,
+          fontSize: 14,
+        ),
+        prefixIcon: Icon(
+          Icons.lock_outline,
+          color: primaryPurple,
+          size: 20,
+        ),
         suffixIcon: IconButton(
           onPressed: onToggle,
           icon: Icon(
@@ -314,6 +491,10 @@ class _SignupScreenState extends State<SignupScreen> {
       ),
     );
   }
+
+  // ----------------------------------------------------------
+  // DISPOSE
+  // ----------------------------------------------------------
 
   @override
   void dispose() {

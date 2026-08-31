@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:skill_exchange/models/quiz_question.dart';
 import 'package:skill_exchange/models/assessment_result.dart';
@@ -26,7 +25,7 @@ class QuizScreen extends StatefulWidget {
 
 class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
-  int _remainingTime = 90;
+  int _remainingTime = 60;
   Timer? _timer;
 
   final List<Map<String, dynamic>> _userAnswers = [];
@@ -34,8 +33,6 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
   final TextEditingController _textAnswerController = TextEditingController();
 
   late List<QuestionData> _parsedQuestions;
-
-  // ================= Anti-Cheating Tracker =================
   int _warningCount = 0;
   final int _maxAllowedWarnings = 3;
   bool _isTerminated = false;
@@ -45,14 +42,12 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // Deduplicate Questions locally to avoid repeated questions on UI
-    final Set<String> seenQuestions = {};
+    // Guaranteed Unique Question Set (Deduplication engine)
+    final Set<String> seen = {};
     _parsedQuestions = widget.quizData.questions.where((q) {
       final normalized = q.question.trim().toLowerCase();
-      if (seenQuestions.contains(normalized)) {
-        return false;
-      }
-      seenQuestions.add(normalized);
+      if (seen.contains(normalized)) return false;
+      seen.add(normalized);
       return true;
     }).toList();
 
@@ -70,23 +65,15 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-
     if (_isTerminated) return;
 
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      _registerCheatingFlag("App minimized or screen swapped!");
+      _registerCheatingFlag("App switch or loss of focus detected!");
     }
   }
 
   void _registerCheatingFlag(String reason) {
-    setState(() {
-      _warningCount++;
-    });
-
-    if (kDebugMode) {
-      debugPrint("FLAG GENERATED: $reason (Count: $_warningCount/$_maxAllowedWarnings)");
-    }
-
+    setState(() => _warningCount++);
     if (_warningCount >= _maxAllowedWarnings) {
       _terminateQuizDueToCheating();
     } else {
@@ -99,21 +86,22 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.red.shade50,
+        backgroundColor: const Color(0xFF1E1B2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+            Icon(Icons.warning_amber_rounded, color: Colors.amberAccent, size: 26),
             SizedBox(width: 8),
-            Text("Cheating Warning!", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            Text("Proctor Alert", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
           ],
         ),
         content: Text(
-          "$reason\n\nWarning $_warningCount of $_maxAllowedWarnings. If you swap screen or minimize app again, your quiz will be terminated automatically!",
-          style: const TextStyle(fontSize: 14),
+          "$reason\n\nWarning $_warningCount of $_maxAllowedWarnings. Further focus losses will invalidate your exam.",
+          style: const TextStyle(color: Colors.white70, fontSize: 13.5),
         ),
         actions: [
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6C5CE7)),
             onPressed: () => Navigator.pop(context),
             child: const Text("I Understand", style: TextStyle(color: Colors.white)),
           ),
@@ -130,20 +118,18 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.red.shade900,
-        title: const Text("Quiz Terminated!", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: const Text(
-          "Multiple screen swapping or app minimization attempts were detected. Your assessment has been auto-terminated due to suspicious activity.",
-          style: TextStyle(color: Colors.white70),
-        ),
+        backgroundColor: const Color(0xFF2D1B2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("Assessment Invalidated", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+        content: const Text("Multiple security focus violations registered.", style: TextStyle(color: Colors.white70)),
         actions: [
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
             onPressed: () {
               Navigator.pop(context);
               Navigator.pop(context);
             },
-            child: const Text("Exit Quiz", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            child: const Text("Exit Exam", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -153,20 +139,14 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
   void _startQuestionTimer() {
     _timer?.cancel();
     if (_parsedQuestions.isNotEmpty && _currentIndex < _parsedQuestions.length) {
-      _remainingTime = _parsedQuestions[_currentIndex].timeInSeconds > 0
-          ? _parsedQuestions[_currentIndex].timeInSeconds
-          : 60;
+      _remainingTime = _parsedQuestions[_currentIndex].timeInSeconds > 0 ? _parsedQuestions[_currentIndex].timeInSeconds : 60;
     } else {
       _remainingTime = 60;
     }
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_remainingTime > 0) {
-        if (mounted) {
-          setState(() {
-            _remainingTime--;
-          });
-        }
+        if (mounted) setState(() => _remainingTime--);
       } else {
         _nextQuestion(isAutoSubmit: true);
       }
@@ -182,12 +162,12 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
     if (!isAutoSubmit) {
       if (isWrittenType && _textAnswerController.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Please write your answer!"), backgroundColor: Colors.orange),
+          SnackBar(content: const Text("Please enter a response before continuing."), backgroundColor: Colors.orange.shade800),
         );
         return;
       } else if (!isWrittenType && _selectedOption == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Please select an answer to continue!"), backgroundColor: Colors.orange),
+          SnackBar(content: const Text("Please select an answer choice."), backgroundColor: Colors.orange.shade800),
         );
         return;
       }
@@ -223,9 +203,7 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
     _textAnswerController.clear();
 
     if (_currentIndex < _parsedQuestions.length - 1) {
-      setState(() {
-        _currentIndex++;
-      });
+      setState(() => _currentIndex++);
       _startQuestionTimer();
     } else {
       _timer?.cancel();
@@ -282,16 +260,16 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
           score: correctAnswersCount.toDouble(),
           isPassed: percentage >= 60.0,
           skillLevel: percentage >= 80 ? 'EXPERT' : (percentage >= 60 ? 'INTERMEDIATE' : 'BEGINNER'),
-          feedback: 'Assessment completed. Total Warnings: $_warningCount',
+          feedback: 'Assessment successfully evaluated.',
           completedAt: DateTime.now(),
           userAnswers: _userAnswers,
         );
       }
 
       if (!mounted) return;
-      final navigator = Navigator.of(context);
-      navigator.pop();
-      navigator.pushReplacement(
+      final nav = Navigator.of(context);
+      nav.pop();
+      nav.pushReplacement(
         MaterialPageRoute(builder: (_) => AssessmentResultScreen(result: result)),
       );
     } catch (e) {
@@ -301,41 +279,35 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildTypeBadge(String type) {
-    Color badgeColor = Colors.purple;
+    Color badgeColor = const Color(0xFF8E44AD);
     String label = "MCQ";
 
     if (type.toLowerCase() == 'scenario') {
-      badgeColor = Colors.orange.shade700;
-      label = "Scenario";
+      badgeColor = const Color(0xFFE67E22);
+      label = "Scenario Problem";
     } else if (type.toLowerCase() == 'short') {
-      badgeColor = Colors.blue.shade700;
-      label = "Short Answer";
-    } else if (type.toLowerCase() == 'conceptual') {
-      badgeColor = Colors.teal.shade700;
-      label = "Conceptual";
+      badgeColor = const Color(0xFF2980B9);
+      label = "Conceptual Written";
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: badgeColor.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: badgeColor.withValues(alpha: 0.4)),
       ),
-      child: Text(
-        label,
-        style: TextStyle(color: badgeColor, fontWeight: FontWeight.bold, fontSize: 12),
-      ),
+      child: Text(label, style: TextStyle(color: badgeColor, fontWeight: FontWeight.bold, fontSize: 11)),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final int totalQuestions = _parsedQuestions.length;
-
     if (totalQuestions == 0) {
-      return Scaffold(
-        appBar: AppBar(backgroundColor: const Color(0xFF6C5CE7)),
-        body: const Center(child: Text("No questions generated.")),
+      return const Scaffold(
+        backgroundColor: Color(0xFF0F0E17),
+        body: Center(child: Text("No questions generated.", style: TextStyle(color: Colors.white))),
       );
     }
 
@@ -343,144 +315,127 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
     final bool isWrittenType = currentQ.type.toLowerCase() == 'short' || currentQ.options.isEmpty;
 
     return Scaffold(
+      backgroundColor: const Color(0xFF0F0E17),
       appBar: AppBar(
-        title: Text("${widget.skillName} (${_currentIndex + 1}/$totalQuestions)"),
-        backgroundColor: const Color(0xFF6C5CE7),
-        foregroundColor: Colors.white,
+        backgroundColor: const Color(0xFF161524),
+        elevation: 0,
+        title: Text("${widget.skillName} Verification", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.white)),
         actions: [
           Container(
             margin: const EdgeInsets.only(right: 16),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: _warningCount > 0 ? Colors.red : Colors.green.shade700,
-              borderRadius: BorderRadius.circular(12),
+              color: _warningCount > 0 ? Colors.redAccent.withValues(alpha: 0.2) : Colors.greenAccent.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(16),
             ),
             child: Row(
               children: [
-                const Icon(Icons.shield_outlined, color: Colors.white, size: 16),
+                Icon(Icons.shield_outlined, color: _warningCount > 0 ? Colors.redAccent : Colors.greenAccent, size: 14),
                 const SizedBox(width: 4),
-                Text(
-                  "Flags: $_warningCount/$_maxAllowedWarnings",
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                ),
+                Text("Security: $_warningCount/$_maxAllowedWarnings", style: TextStyle(color: _warningCount > 0 ? Colors.redAccent : Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold)),
               ],
             ),
           )
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            LinearProgressIndicator(
-              value: (_currentIndex + 1) / totalQuestions,
-              backgroundColor: Colors.grey.shade200,
-              color: const Color(0xFF6C5CE7),
-              minHeight: 6,
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    _buildTypeBadge(currentQ.type),
-                    const SizedBox(width: 8),
-                    Text(
-                      "Difficulty: ${currentQ.difficulty}",
-                      style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    const Icon(Icons.timer, color: Colors.redAccent),
-                    const SizedBox(width: 4),
-                    Text(
-                      "${_remainingTime}s",
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.redAccent),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Text(
-              "Q${_currentIndex + 1}. ${currentQ.question}",
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, height: 1.3),
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: isWrittenType
-                  ? TextField(
-                controller: _textAnswerController,
-                maxLines: 5,
-                decoration: InputDecoration(
-                  hintText: "Type your conceptual/short answer here...",
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  focusedBorder: const OutlineInputBorder(
-                    borderSide: BorderSide(color: Color(0xFF6C5CE7), width: 2),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              LinearProgressIndicator(
+                value: (_currentIndex + 1) / totalQuestions,
+                backgroundColor: const Color(0xFF1E1B2E),
+                color: const Color(0xFF6C5CE7),
+                minHeight: 6,
+              ),
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      _buildTypeBadge(currentQ.type),
+                      const SizedBox(width: 8),
+                      Text("Q${_currentIndex + 1} of $totalQuestions", style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                    ],
                   ),
-                ),
-              )
-                  : ListView.builder(
-                itemCount: currentQ.options.length,
-                itemBuilder: (context, index) {
-                  final isSelected = _selectedOption == index;
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedOption = index;
-                      });
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: isSelected ? const Color(0xFF6C5CE7).withValues(alpha: 0.08) : Colors.white,
-                        border: Border.all(
-                          color: isSelected ? const Color(0xFF6C5CE7) : Colors.grey.shade300,
-                          width: 2,
-                        ),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-                            color: isSelected ? const Color(0xFF6C5CE7) : Colors.grey,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              currentQ.options[index],
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _remainingTime <= 15 ? Colors.redAccent.withValues(alpha: 0.2) : const Color(0xFF6C5CE7).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  );
-                },
+                    child: Text("${_remainingTime}s", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _remainingTime <= 15 ? Colors.redAccent : const Color(0xFFA29BFE))),
+                  ),
+                ],
               ),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6C5CE7),
-                minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              const SizedBox(height: 20),
+              Text(
+                currentQ.question,
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white, height: 1.4),
               ),
-              onPressed: () => _nextQuestion(isAutoSubmit: false),
-              child: Text(
-                _currentIndex == totalQuestions - 1 ? "Finish Assessment" : "Next Question",
-                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              const SizedBox(height: 20),
+              Expanded(
+                child: isWrittenType
+                    ? TextField(
+                  controller: _textAnswerController,
+                  maxLines: 6,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: "Type dynamic conceptual solution here...",
+                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+                    filled: true,
+                    fillColor: const Color(0xFF161524),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  ),
+                )
+                    : ListView.builder(
+                  itemCount: currentQ.options.length,
+                  itemBuilder: (context, index) {
+                    final isSelected = _selectedOption == index;
+                    return GestureDetector(
+                      onTap: () => setState(() => _selectedOption = index),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: isSelected ? const Color(0xFF6C5CE7).withValues(alpha: 0.25) : const Color(0xFF161524),
+                          border: Border.all(color: isSelected ? const Color(0xFF6C5CE7) : Colors.white10),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 10,
+                              backgroundColor: isSelected ? const Color(0xFF6C5CE7) : Colors.transparent,
+                              child: isSelected ? const Icon(Icons.check, size: 12, color: Colors.white) : null,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(child: Text(currentQ.options[index], style: TextStyle(color: isSelected ? Colors.white : Colors.white70, fontSize: 14))),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6C5CE7),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  onPressed: () => _nextQuestion(isAutoSubmit: false),
+                  child: Text(_currentIndex == totalQuestions - 1 ? "Submit Assessment" : "Next Question", style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

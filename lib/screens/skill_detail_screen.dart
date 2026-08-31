@@ -29,16 +29,24 @@ class _SkillDetailScreenState extends State<SkillDetailScreen> {
   Future<void> _fetchAIModules() async {
     setState(() => _isLoading = true);
     try {
-      final modules = await GeminiService.instance.generateRoadmapModules(widget.skillName);
-      setState(() {
-        _modules = modules;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
+      final modules = await GeminiService.instance.generateRoadmapModules(
+        widget.skillName,
+      );
       if (mounted) {
+        setState(() {
+          _modules = modules;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading AI roadmap: $e')),
+          SnackBar(
+            content: Text('Error loading AI roadmap: $e'),
+            backgroundColor: Colors.redAccent,
+            duration: const Duration(seconds: 4),
+          ),
         );
       }
     }
@@ -123,19 +131,44 @@ class _SkillDetailScreenState extends State<SkillDetailScreen> {
                     SizedBox(height: 16),
                     Text(
                       "AI is generating custom modules...",
-                      style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ],
                 ),
               )
                   : _modules.isEmpty
-                  ? const Center(child: Text("No modules found."))
+                  ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        size: 48, color: Colors.grey.shade400),
+                    const SizedBox(height: 8),
+                    const Text(
+                      "No modules found.",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xff6A1B9A),
+                      ),
+                      onPressed: _fetchAIModules,
+                      child: const Text("Retry",
+                          style: TextStyle(color: Colors.white)),
+                    ),
+                  ],
+                ),
+              )
                   : ListView.builder(
                 physics: const BouncingScrollPhysics(),
                 itemCount: _modules.length,
                 itemBuilder: (context, index) {
                   final module = _modules[index];
-                  final List topics = module["topics"] ?? [];
+                  final List topics = module["topics"] as List? ?? [];
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -146,7 +179,8 @@ class _SkillDetailScreenState extends State<SkillDetailScreen> {
                     ),
                     child: ExpansionTile(
                       leading: CircleAvatar(
-                        backgroundColor: const Color(0xff6A1B9A).withAlpha(30),
+                        backgroundColor:
+                        const Color(0xff6A1B9A).withAlpha(30),
                         child: Text(
                           "${module["moduleNumber"] ?? index + 1}",
                           style: const TextStyle(
@@ -157,18 +191,24 @@ class _SkillDetailScreenState extends State<SkillDetailScreen> {
                       ),
                       title: Text(
                         module["title"] ?? "Module ${index + 1}",
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        style:
+                        const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       subtitle: Text(
                         "${module["duration"] ?? "1 Week"} • ${module["description"] ?? ""}",
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
                       ),
                       children: [
                         Padding(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 16.0, vertical: 8.0),
+                            horizontal: 16.0,
+                            vertical: 8.0,
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -190,21 +230,30 @@ class _SkillDetailScreenState extends State<SkillDetailScreen> {
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(
-                                          builder: (context) => TopicLessonScreen(
-                                            skillName: widget.skillName,
-                                            topicName: topicStr,
-                                          ),
+                                          builder: (context) =>
+                                              TopicLessonScreen(
+                                                skillName: widget.skillName,
+                                                topicName: topicStr,
+                                                category: widget.category,
+                                              ),
                                         ),
                                       );
                                     },
-                                    borderRadius: BorderRadius.circular(8),
+                                    borderRadius:
+                                    BorderRadius.circular(8),
                                     child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 6.0, horizontal: 4.0),
+                                      padding:
+                                      const EdgeInsets.symmetric(
+                                        vertical: 6.0,
+                                        horizontal: 4.0,
+                                      ),
                                       child: Row(
                                         children: [
-                                          const Icon(Icons.play_circle_fill,
-                                              size: 18, color: Color(0xff6A1B9A)),
+                                          const Icon(
+                                            Icons.play_circle_fill,
+                                            size: 18,
+                                            color: Color(0xff6A1B9A),
+                                          ),
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: Text(
@@ -216,8 +265,11 @@ class _SkillDetailScreenState extends State<SkillDetailScreen> {
                                               ),
                                             ),
                                           ),
-                                          const Icon(Icons.arrow_forward_ios,
-                                              size: 12, color: Colors.grey),
+                                          const Icon(
+                                            Icons.arrow_forward_ios,
+                                            size: 12,
+                                            color: Colors.grey,
+                                          ),
                                         ],
                                       ),
                                     ),

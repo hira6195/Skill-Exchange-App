@@ -3,8 +3,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:skill_exchange/models/notification_model.dart';
 import 'package:skill_exchange/services/notification_service.dart';
 
-class NotificationScreen extends StatelessWidget {
+class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
+
+  @override
+  State<NotificationScreen> createState() => _NotificationScreenState();
+}
+
+class _NotificationScreenState extends State<NotificationScreen> {
+  final NotificationService _notificationService = NotificationService();
+
+  static const Color _primaryColor = Color(0xFF7C4DFF);
+  static const Color _backgroundColor = Color(0xFFF4F5FA);
 
   IconData _getNotificationIcon(String type) {
     switch (type.toLowerCase()) {
@@ -24,38 +34,6 @@ class NotificationScreen extends StatelessWidget {
     }
   }
 
-  Color _getIconBackgroundColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'booking':
-      case 'session confirmed':
-        return Colors.purple.shade50;
-      case 'reminder':
-      case 'session reminder':
-        return Colors.purple.shade100;
-      case 'message':
-      case 'new message':
-        return Colors.purple.shade50;
-      default:
-        return Colors.purple.shade50;
-    }
-  }
-
-  Color _getIconColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'booking':
-      case 'session confirmed':
-        return Colors.deepPurple;
-      case 'reminder':
-      case 'session reminder':
-        return Colors.deepPurple.shade700;
-      case 'message':
-      case 'new message':
-        return Colors.deepPurple;
-      default:
-        return Colors.deepPurple;
-    }
-  }
-
   String _formatTime(dynamic rawTime) {
     if (rawTime is Timestamp) {
       final dateTime = rawTime.toDate();
@@ -69,68 +47,109 @@ class NotificationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final NotificationService notificationService = NotificationService();
-
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: _backgroundColor,
       appBar: AppBar(
-        title: Row(
+        backgroundColor: _backgroundColor,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: true,
+        leading: Container(
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: IconButton(
+            icon: const Icon(
+              Icons.arrow_back_ios_new_rounded,
+              color: Color(0xFF1E1B29),
+              size: 18,
+            ),
+            onPressed: () {
+              if (Navigator.canPop(context)) Navigator.pop(context);
+            },
+            tooltip: 'Back',
+          ),
+        ),
+        title: const Row(
           mainAxisSize: MainAxisSize.min,
-          children: const [
+          children: [
             Text(
-              'Notification ',
+              'Notifications ',
               style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 20,
-                color: Colors.deepPurple,
+                fontWeight: FontWeight.w800,
+                fontSize: 19,
+                color: Color(0xFF1E1B29),
               ),
             ),
             Text('🔔', style: TextStyle(fontSize: 18)),
           ],
         ),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0,
       ),
       body: StreamBuilder<List<NotificationModel>>(
-        stream: notificationService.getUserNotificationsStream(),
+        stream: _notificationService.getUserNotificationsStream(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: Colors.deepPurple),
+              child: CircularProgressIndicator(color: _primaryColor),
             );
           }
 
           if (snapshot.hasError) {
             return Center(
-              child: Text(
-                'Error loading notifications: ${snapshot.error}',
-                style: const TextStyle(color: Colors.red),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Text(
+                  'Error loading notifications: ${snapshot.error}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                ),
               ),
             );
           }
 
           final notifications = snapshot.data ?? [];
 
-          // Pure dynamic check: Shows Empty State if no backend data
           if (notifications.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.notifications_none_rounded,
-                    size: 70,
-                    color: Colors.deepPurple.shade200,
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: _primaryColor.withValues(alpha: 0.08),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.notifications_off_rounded,
+                      size: 60,
+                      color: _primaryColor.withValues(alpha: 0.6),
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  Text(
+                  const Text(
                     'No notifications yet',
                     style: TextStyle(
                       fontSize: 16,
+                      color: Color(0xFF1E1B29),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'You will see updates here as they arrive',
+                    style: TextStyle(
+                      fontSize: 13,
                       color: Colors.grey.shade600,
-                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
@@ -139,6 +158,7 @@ class NotificationScreen extends StatelessWidget {
           }
 
           return ListView.builder(
+            physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             itemCount: notifications.length,
             itemBuilder: (context, index) {
@@ -147,42 +167,43 @@ class NotificationScreen extends StatelessWidget {
               return GestureDetector(
                 onTap: () {
                   if (!item.isRead) {
-                    notificationService.markAsRead(item.notificationId);
+                    _notificationService.markAsRead(item.notificationId);
                   }
                 },
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 16),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: item.isRead
-                        ? Colors.white
-                        : Colors.deepPurple.shade50.withOpacity(0.4),
-                    borderRadius: BorderRadius.circular(18),
+                    color: item.isRead ? Colors.white : const Color(0xFFF3E8FF),
+                    borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
                       ),
                     ],
                     border: Border.all(
                       color: item.isRead
-                          ? Colors.grey.shade100
-                          : Colors.deepPurple.shade100,
+                          ? const Color(0xFFE2E8F0)
+                          : const Color(0xFFD8B4FE),
+                      width: 1,
                     ),
                   ),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: _getIconBackgroundColor(item.type),
-                          borderRadius: BorderRadius.circular(14),
+                          color: _primaryColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
                           _getNotificationIcon(item.type),
-                          color: _getIconColor(item.type),
-                          size: 24,
+                          color: _primaryColor,
+                          size: 22,
                         ),
                       ),
                       const SizedBox(width: 14),
@@ -196,21 +217,23 @@ class NotificationScreen extends StatelessWidget {
                                 fontSize: 14,
                                 fontWeight: item.isRead
                                     ? FontWeight.w600
-                                    : FontWeight.bold,
-                                color: Colors.black87,
+                                    : FontWeight.w800,
+                                color: const Color(0xFF1E1B29),
                               ),
                             ),
-                            const SizedBox(height: 3),
+                            const SizedBox(height: 4),
                             Text(
                               item.body,
                               style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
+                                fontSize: 12.5,
+                                color: Colors.grey.shade700,
+                                height: 1.3,
                               ),
                             ),
                           ],
                         ),
                       ),
+                      const SizedBox(width: 8),
                       Text(
                         _formatTime(item.createdAt),
                         style: TextStyle(

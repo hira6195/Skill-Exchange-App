@@ -59,3 +59,11 @@ google-services.json
 android/app/google-services.json
 log.txt
 android/gradle/android/
+# Backend secrets
+backend/.env
+backend/*firebase-adminsdk*.json
+backend/node_modules/
+
+# Local lib backups
+lib.zip
+lib (2).zip

@@ -17,6 +17,10 @@ class BookingService {
     required String skill,
     required double amount,
     DateTime? date,
+    String sessionTime = '10:00 AM',
+    String sessionType = 'One-on-One',
+    String duration = '1 Hour',
+    String notes = '',
   }) async {
     try {
       final uid = currentUserId ?? 'guest_user';
@@ -31,10 +35,10 @@ class BookingService {
         teacherName: expertName,
         skill: skill,
         sessionDate: DateFormat('dd MMMM yyyy').format(selectedDate),
-        sessionTime: '10:00 AM',
-        sessionType: 'One-on-One',
-        duration: '1 Hour',
-        notes: 'Booked via Expert Screen',
+        sessionTime: sessionTime,
+        sessionType: sessionType,
+        duration: duration,
+        notes: notes.isNotEmpty ? notes : 'Booked via Expert Screen',
         status: 'Confirmed',
         bookingDate: DateTime.now(),
       );
