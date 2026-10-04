@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+          fetch-depth: 0  
       
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -34,3 +34,8 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.projectKey=hira6195_Skill-Exchange-App
+            -Dsonar.organization=hira6195
+            -Dsonar.sources=lib
