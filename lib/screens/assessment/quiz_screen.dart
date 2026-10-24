@@ -37,12 +37,17 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
   final int _maxAllowedWarnings = 3;
   bool _isTerminated = false;
 
+  // Modern Professional Dark Theme Palette
+  static const Color primaryPurple = Color(0xFF7C4DFF);
+  static const Color darkBackground = Color(0xFF0B0E14);
+  static const Color cardColor = Color(0xFF151921);
+  static const Color cardBorderColor = Color(0xFF232936);
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // Guaranteed Unique Question Set (Deduplication engine)
     final Set<String> seen = {};
     _parsedQuestions = widget.quizData.questions.where((q) {
       final normalized = q.question.trim().toLowerCase();
@@ -86,8 +91,11 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1B2E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: cardColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: cardBorderColor),
+        ),
         title: const Row(
           children: [
             Icon(Icons.warning_amber_rounded, color: Colors.amberAccent, size: 26),
@@ -101,9 +109,9 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
         ),
         actions: [
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6C5CE7)),
+            style: ElevatedButton.styleFrom(backgroundColor: primaryPurple),
             onPressed: () => Navigator.pop(context),
-            child: const Text("I Understand", style: TextStyle(color: Colors.white)),
+            child: const Text("I Understand", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -118,8 +126,11 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2D1B2E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: cardColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Colors.redAccent),
+        ),
         title: const Text("Assessment Invalidated", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
         content: const Text("Multiple security focus violations registered.", style: TextStyle(color: Colors.white70)),
         actions: [
@@ -129,7 +140,7 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
               Navigator.pop(context);
               Navigator.pop(context);
             },
-            child: const Text("Exit Exam", style: TextStyle(color: Colors.white)),
+            child: const Text("Exit Exam", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -180,14 +191,15 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
       selectedText = currentQ.options[_selectedOption!];
     }
 
-    String correctText = "";
-    if (currentQ.correctOptionIndex >= 0 && currentQ.correctOptionIndex < currentQ.options.length) {
+    String correctText = currentQ.correctAnswer;
+    if (correctText.isEmpty && currentQ.correctOptionIndex >= 0 && currentQ.correctOptionIndex < currentQ.options.length) {
       correctText = currentQ.options[currentQ.correctOptionIndex];
     }
 
     _userAnswers.add({
       'id': currentQ.id,
       'question': currentQ.question,
+      'codeSnippet': currentQ.codeSnippet,
       'type': currentQ.type,
       'topic': currentQ.topic,
       'difficulty': currentQ.difficulty,
@@ -215,56 +227,16 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator(color: Color(0xFF6C5CE7))),
+      builder: (_) => const Center(child: CircularProgressIndicator(color: primaryPurple)),
     );
 
     try {
-      int correctAnswersCount = 0;
-      int totalQuestions = _userAnswers.length;
-
-      for (var qa in _userAnswers) {
-        int? selectedIdx = qa['selectedOptionIndex'] as int?;
-        int correctIdx = qa['correctOptionIndex'] as int? ?? -1;
-        String selectedStr = (qa['selectedOptionText'] ?? "").toString().trim().toLowerCase();
-        String correctStr = (qa['correctAnswerText'] ?? "").toString().trim().toLowerCase();
-
-        bool isCorrect = false;
-        if (selectedIdx != null && selectedIdx == correctIdx) {
-          isCorrect = true;
-        } else if (selectedStr.isNotEmpty && correctStr.isNotEmpty && selectedStr == correctStr) {
-          isCorrect = true;
-        }
-
-        if (isCorrect) correctAnswersCount++;
-      }
-
-      int wrongAnswersCount = totalQuestions - correctAnswersCount;
-      double percentage = totalQuestions > 0 ? (correctAnswersCount / totalQuestions) * 100 : 0.0;
-
-      AssessmentResult result;
-      try {
-        result = await AssessmentService().evaluateAssessment(
-          sessionId: widget.sessionId,
-          userId: widget.userId,
-          skillName: widget.skillName,
-          questionsWithUserAnswers: _userAnswers,
-        );
-      } catch (e) {
-        result = AssessmentResult(
-          sessionId: widget.sessionId,
-          userId: widget.userId,
-          skillName: widget.skillName,
-          correctAnswers: correctAnswersCount,
-          wrongAnswers: wrongAnswersCount,
-          percentage: percentage,
-          score: correctAnswersCount.toDouble(),
-          isPassed: percentage >= 60.0,
-          skillLevel: percentage >= 80 ? 'EXPERT' : (percentage >= 60 ? 'INTERMEDIATE' : 'BEGINNER'),
-          feedback: 'Assessment successfully evaluated.',
-          completedAt: DateTime.now(),
-          userAnswers: _userAnswers,
-        );
-      }
+      AssessmentResult result = await AssessmentService().evaluateAssessment(
+        sessionId: widget.sessionId,
+        userId: widget.userId,
+        skillName: widget.skillName,
+        questionsWithUserAnswers: _userAnswers,
+      );
 
       if (!mounted) return;
       final nav = Navigator.of(context);
@@ -279,15 +251,18 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildTypeBadge(String type) {
-    Color badgeColor = const Color(0xFF8E44AD);
+    Color badgeColor = primaryPurple;
     String label = "MCQ";
 
     if (type.toLowerCase() == 'scenario') {
-      badgeColor = const Color(0xFFE67E22);
+      badgeColor = const Color(0xFFFFB74D);
       label = "Scenario Problem";
     } else if (type.toLowerCase() == 'short') {
-      badgeColor = const Color(0xFF2980B9);
+      badgeColor = const Color(0xFF64B5F6);
       label = "Conceptual Written";
+    } else if (type.toLowerCase() == 'coding') {
+      badgeColor = const Color(0xFF00E676);
+      label = "Code Logic & Syntax";
     }
 
     return Container(
@@ -301,12 +276,37 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
     );
   }
 
+  Widget _buildCodeBlock(String code) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF07090E),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: primaryPurple.withValues(alpha: 0.3)),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Text(
+          code,
+          style: const TextStyle(
+            fontFamily: 'monospace',
+            fontSize: 13,
+            color: Color(0xFF80D8FF),
+            height: 1.4,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final int totalQuestions = _parsedQuestions.length;
     if (totalQuestions == 0) {
       return const Scaffold(
-        backgroundColor: Color(0xFF0F0E17),
+        backgroundColor: darkBackground,
         body: Center(child: Text("No questions generated.", style: TextStyle(color: Colors.white))),
       );
     }
@@ -315,18 +315,20 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
     final bool isWrittenType = currentQ.type.toLowerCase() == 'short' || currentQ.options.isEmpty;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0E17),
+      backgroundColor: darkBackground,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF161524),
+        backgroundColor: cardColor,
         elevation: 0,
+        leading: const BackButton(color: Colors.white),
         title: Text("${widget.skillName} Verification", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.white)),
         actions: [
           Container(
             margin: const EdgeInsets.only(right: 16),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: _warningCount > 0 ? Colors.redAccent.withValues(alpha: 0.2) : Colors.greenAccent.withValues(alpha: 0.15),
+              color: _warningCount > 0 ? Colors.redAccent.withValues(alpha: 0.2) : Colors.greenAccent.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _warningCount > 0 ? Colors.redAccent.withValues(alpha: 0.5) : Colors.greenAccent.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
@@ -344,11 +346,14 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              LinearProgressIndicator(
-                value: (_currentIndex + 1) / totalQuestions,
-                backgroundColor: const Color(0xFF1E1B2E),
-                color: const Color(0xFF6C5CE7),
-                minHeight: 6,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: (_currentIndex + 1) / totalQuestions,
+                  backgroundColor: cardBorderColor,
+                  color: primaryPurple,
+                  minHeight: 6,
+                ),
               ),
               const SizedBox(height: 18),
               Row(
@@ -358,25 +363,30 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
                     children: [
                       _buildTypeBadge(currentQ.type),
                       const SizedBox(width: 8),
-                      Text("Q${_currentIndex + 1} of $totalQuestions", style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                      Text("Q${_currentIndex + 1} of $totalQuestions", style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
                     ],
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                     decoration: BoxDecoration(
-                      color: _remainingTime <= 15 ? Colors.redAccent.withValues(alpha: 0.2) : const Color(0xFF6C5CE7).withValues(alpha: 0.15),
+                      color: _remainingTime <= 15 ? Colors.redAccent.withValues(alpha: 0.2) : primaryPurple.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _remainingTime <= 15 ? Colors.redAccent.withValues(alpha: 0.4) : primaryPurple.withValues(alpha: 0.3)),
                     ),
-                    child: Text("${_remainingTime}s", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _remainingTime <= 15 ? Colors.redAccent : const Color(0xFFA29BFE))),
+                    child: Text("${_remainingTime}s", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _remainingTime <= 15 ? Colors.redAccent : const Color(0xFFD1C4E9))),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               Text(
                 currentQ.question,
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white, height: 1.4),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white, height: 1.4),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 14),
+
+              if (currentQ.codeSnippet != null && currentQ.codeSnippet!.isNotEmpty)
+                _buildCodeBlock(currentQ.codeSnippet!),
+
               Expanded(
                 child: isWrittenType
                     ? TextField(
@@ -384,11 +394,22 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
                   maxLines: 6,
                   style: const TextStyle(color: Colors.white, fontSize: 14),
                   decoration: InputDecoration(
-                    hintText: "Type dynamic conceptual solution here...",
-                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+                    hintText: "Type conceptual solution or reasoning here...",
+                    hintStyle: const TextStyle(color: Colors.white38),
                     filled: true,
-                    fillColor: const Color(0xFF161524),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                    fillColor: cardColor,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: cardBorderColor),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: cardBorderColor),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: primaryPurple, width: 1.5),
+                    ),
                   ),
                 )
                     : ListView.builder(
@@ -402,19 +423,36 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
                         margin: const EdgeInsets.only(bottom: 12),
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: isSelected ? const Color(0xFF6C5CE7).withValues(alpha: 0.25) : const Color(0xFF161524),
-                          border: Border.all(color: isSelected ? const Color(0xFF6C5CE7) : Colors.white10),
+                          color: isSelected ? primaryPurple.withValues(alpha: 0.2) : cardColor,
+                          border: Border.all(
+                            color: isSelected ? primaryPurple : cardBorderColor,
+                            width: isSelected ? 1.5 : 1.0,
+                          ),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Row(
                           children: [
-                            CircleAvatar(
-                              radius: 10,
-                              backgroundColor: isSelected ? const Color(0xFF6C5CE7) : Colors.transparent,
-                              child: isSelected ? const Icon(Icons.check, size: 12, color: Colors.white) : null,
+                            Container(
+                              width: 22,
+                              height: 22,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isSelected ? primaryPurple : Colors.transparent,
+                                border: Border.all(color: isSelected ? primaryPurple : Colors.white38, width: 2),
+                              ),
+                              child: isSelected ? const Icon(Icons.check, size: 14, color: Colors.white) : null,
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(child: Text(currentQ.options[index], style: TextStyle(color: isSelected ? Colors.white : Colors.white70, fontSize: 14))),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Text(
+                                currentQ.options[index],
+                                style: TextStyle(
+                                  color: isSelected ? Colors.white : Colors.white70,
+                                  fontSize: 14,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -427,11 +465,15 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
                 height: 52,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6C5CE7),
+                    backgroundColor: primaryPurple,
+                    elevation: 2,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   onPressed: () => _nextQuestion(isAutoSubmit: false),
-                  child: Text(_currentIndex == totalQuestions - 1 ? "Submit Assessment" : "Next Question", style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    _currentIndex == totalQuestions - 1 ? "Submit Assessment" : "Next Question",
+                    style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
             ],

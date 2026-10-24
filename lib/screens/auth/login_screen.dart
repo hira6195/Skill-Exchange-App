@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:skill_exchange/screens/auth/auth_gate.dart';
 import 'package:skill_exchange/screens/auth/signup_screen.dart';
 
@@ -14,8 +16,10 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   bool isLoading = false;
+  bool isGoogleLoading = false;
   bool isPasswordVisible = false;
 
   // ==========================================================
@@ -39,7 +43,6 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      // SIGN IN WITH FIREBASE
       final UserCredential credential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
@@ -53,8 +56,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      // NAVIGATE TO AUTH GATE
-      // AuthGate checks if user is logged in & determines if user goes to PremiumDashboard or MainDashboard
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
@@ -108,6 +109,80 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         setState(() {
           isLoading = false;
+        });
+      }
+    }
+  }
+
+  // ==========================================================
+  // GOOGLE SIGN IN LOGIC
+  // ==========================================================
+
+  Future<void> signInWithGoogle() async {
+    setState(() {
+      isGoogleLoading = true;
+    });
+
+    try {
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        setState(() {
+          isGoogleLoading = false;
+        });
+        return;
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      UserCredential userCredential = await _auth.signInWithCredential(credential);
+      User? user = userCredential.user;
+
+      if (user != null) {
+        DocumentSnapshot userDoc =
+        await _firestore.collection('users').doc(user.uid).get();
+
+        if (!userDoc.exists) {
+          await _firestore.collection('users').doc(user.uid).set({
+            "uid": user.uid,
+            "name": user.displayName ?? "User",
+            "email": user.email ?? "",
+            "role": "Learner",
+            "profileImage": user.photoURL ?? "",
+            "bio": "",
+            "skills": [],
+            "verified": false,
+            "isEmailVerified": true,
+            "rating": 0,
+            "totalSessions": 0,
+            "isProfileCompleted": false,
+            "isPremium": false,
+            "subscriptionPlan": "Basic",
+            "createdAt": FieldValue.serverTimestamp(),
+          });
+        }
+      }
+
+      if (!mounted) return;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const AuthGate(),
+        ),
+            (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showMessage("Google Sign-In failed: $e", isError: true);
+    } finally {
+      if (mounted) {
+        setState(() {
+          isGoogleLoading = false;
         });
       }
     }
@@ -223,7 +298,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  onPressed: isLoading ? null : loginUser,
+                  onPressed: (isLoading || isGoogleLoading) ? null : loginUser,
                   child: isLoading
                       ? const SizedBox(
                     height: 24,
@@ -244,6 +319,65 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 20),
+
+              // OR DIVIDER
+              Row(
+                children: [
+                  Expanded(child: Divider(color: Colors.grey.shade300)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Text(
+                      "OR",
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                    ),
+                  ),
+                  Expanded(child: Divider(color: Colors.grey.shade300)),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // GOOGLE BUTTON
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    side: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  onPressed: (isLoading || isGoogleLoading) ? null : signInWithGoogle,
+                  child: isGoogleLoading
+                      ? const SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: CircularProgressIndicator(
+                      color: Color(0xff6A1B9A),
+                      strokeWidth: 2,
+                    ),
+                  )
+                      : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Image.network(
+                        'https://cdn-icons-png.flaticon.com/512/300/300221.png',
+                        height: 22,
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        "Continue with Google",
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 25),
 
               // SIGNUP LINK
               Row(

@@ -13,7 +13,7 @@ class AssessmentIntroScreen extends StatefulWidget {
   const AssessmentIntroScreen({
     super.key,
     required this.skillName,
-    required this.certificateText,
+    required this.certificateText, required String userId,
   });
 
   @override

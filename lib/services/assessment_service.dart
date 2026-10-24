@@ -13,24 +13,26 @@ class AssessmentService {
 
   Future<AssessmentQuizData> generateAssessmentQuiz(String skillName) async {
     final int seed = DateTime.now().microsecondsSinceEpoch;
-    final int questionCount = Random().nextInt(6) + 10; // Generates between 10 to 15 questions
+    final int questionCount = Random().nextInt(3) + 6; // 6 to 8 questions
 
     final String prompt = '''
 You are a Senior Technical Examiner crafting an assessment exam for "$skillName".
 Randomization Seed: $seed.
 Generate $questionCount HIGH-QUALITY, DIVERSE, REAL-WORLD questions.
 
-STRICT REQUIREMENTS:
-1. QUESTION COUNT: Exactly $questionCount questions. (Minimum 10, Maximum 20).
-2. DIVERSITY MIX: Combine MCQs, Scenarios, Conceptual, Short Answer, and Coding/Logic Snippets.
-3. FOR "short" or "coding" TYPE: "options" MUST be empty [] and "correctOptionIndex" MUST be -1.
-4. NO REPETITION: Every question must test distinct concepts across retakes.
-5. Return ONLY raw valid JSON (no markdown formatting, no ```json tags).
+STRICT GENERATION RULES:
+1. QUESTION COUNT: Exactly $questionCount questions.
+2. MIX OF TYPES: Ensure a balanced mix of "mcq", "scenario", "short", and "coding".
+3. UNIQUE OPTIONS: For "mcq" and "scenario" types, every option in the "options" array MUST BE ENTIRELY UNIQUE and non-repeating. Never provide identical options!
+4. CODING QUESTIONS: If "$skillName" involves programming, software, or tech, include at least 1-2 "coding" questions. Always provide a clear "codeSnippet" (code block string) showing code syntax, bugs, or logic.
+5. FOR "short" TYPE: "options" MUST be empty [] and "correctOptionIndex" MUST be -1. Provide a clear "correctAnswer" model answer.
+6. EXPLANATION: Max 15 words.
+7. Return ONLY raw valid JSON (no markdown formatting, no ```json tags).
 
 JSON Schema:
 {
   "difficulty": "Adaptive",
-  "questionTypeStats": {"mcq": 5, "scenario": 3, "short": 2, "coding": 2},
+  "questionTypeStats": {"mcq": 2, "scenario": 2, "short": 1, "coding": 2},
   "totalTime": 900,
   "totalQuestions": $questionCount,
   "estimatedTimeMinutes": 15,
@@ -38,22 +40,27 @@ JSON Schema:
   "questions": [
     {
       "id": "q_${seed}_1",
-      "type": "mcq", 
+      "type": "coding",
       "difficulty": "Hard",
-      "topic": "Architecture & Logic",
+      "topic": "Syntax & Logic",
       "timeInSeconds": 60,
-      "question": "Clear, deep technical question text...",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "question": "What is the output or error in the following code snippet?",
+      "codeSnippet": "void main() {\\n  var list = [1, 2, 3];\\n  print(list[5]);\\n}",
+      "options": ["RangeError (Index out of range)", "Prints null", "Prints 5", "Compilation Error"],
       "correctOptionIndex": 0,
-      "correctAnswer": "Option A",
-      "explanation": "Detailed explanation of why this option is correct."
+      "correctAnswer": "RangeError (Index out of range)",
+      "explanation": "Accessing index 5 on a 3-element array throws a RangeError."
     }
   ]
 }
 ''';
 
     try {
-      final String rawJson = await _geminiService.generateText(prompt);
+      final String rawJson = await _geminiService.generateText(prompt).timeout(
+        const Duration(seconds: 20),
+        onTimeout: () => throw Exception('AI quiz generation timed out'),
+      );
+
       String cleanJson = rawJson.trim();
       if (cleanJson.startsWith('```json')) {
         cleanJson = cleanJson.replaceAll('```json', '').replaceAll('```', '').trim();
@@ -66,7 +73,7 @@ JSON Schema:
     } catch (e) {
       return await _geminiService.generateDynamicQuiz(
         skill: skillName,
-        targetQuestionCount: questionCount,
+        targetQuestionCount: min(questionCount, 6),
       );
     }
   }
@@ -165,14 +172,19 @@ JSON Schema:
 
       bool isCorrect = false;
 
-      if (type == 'short' || type == 'coding') {
-        if (userText.length > 15) {
-          isCorrect = true;
+      if (type == 'short') {
+        // Fair evaluation for written answers: match key words or meaningful response length
+        if (userText.length >= 10) {
+          List<String> correctKeywords = correctText.split(' ').where((w) => w.length > 3).toList();
+          int matchedCount = correctKeywords.where((kw) => userText.contains(kw)).length;
+          if (correctKeywords.isEmpty || matchedCount > 0 || userText.length > 25) {
+            isCorrect = true;
+          }
         }
       } else {
-        if (userText.isNotEmpty && correctText.isNotEmpty && userText == correctText) {
+        if (selectedIndex != null && correctIndex >= 0 && selectedIndex == correctIndex) {
           isCorrect = true;
-        } else if (selectedIndex != null && selectedIndex == correctIndex) {
+        } else if (userText.isNotEmpty && correctText.isNotEmpty && userText == correctText) {
           isCorrect = true;
         }
       }
@@ -216,12 +228,16 @@ PERFORMANCE BREAKDOWN: ${jsonEncode(performanceBreakdown)}
 Return ONLY raw JSON object:
 {
   "skillLevel": "Beginner | Intermediate | Expert",
-  "feedback": "Concise technical feedback regarding overall evaluation."
+  "feedback": "Concise technical feedback regarding overall evaluation (max 2 sentences)."
 }
 ''';
 
     try {
-      final String aiRawResponse = await _geminiService.generateText(prompt);
+      final String aiRawResponse = await _geminiService.generateText(prompt).timeout(
+        const Duration(seconds: 12),
+        onTimeout: () => throw Exception('AI feedback timed out'),
+      );
+
       String cleanJson = aiRawResponse.trim();
       if (cleanJson.startsWith('```json')) {
         cleanJson = cleanJson.replaceAll('```json', '').replaceAll('```', '').trim();

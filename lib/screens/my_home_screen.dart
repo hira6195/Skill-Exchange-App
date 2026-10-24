@@ -7,7 +7,7 @@ import 'ai_match_screen.dart';
 import 'notification_screen.dart';
 import 'session_history_screen.dart';
 import 'pricing_plans_screen.dart';
-import 'search_skills_screen.dart'; // Standard Search Screen Import
+import 'search_skills_screen.dart';
 import 'verify_skill/verify_skill_screen.dart';
 import 'auth/auth_gate.dart';
 import 'package:skill_exchange/screens/teacher/session_requests_screen.dart';
@@ -22,9 +22,11 @@ class MyHomeScreen extends StatelessWidget {
     this.onSearchTap,
   });
 
-  void _navigateToTabOrPush(BuildContext context, int tabIndex) {
+  void _navigateToTabOrPush(BuildContext context, int tabIndex, Widget fallbackScreen) {
     if (onTabSelect != null) {
       onTabSelect!(tabIndex);
+    } else {
+      _animatedNavigate(context, fallbackScreen);
     }
   }
 
@@ -99,7 +101,7 @@ class MyHomeScreen extends StatelessWidget {
                   subtitle: const Text("Manage your bio & skills"),
                   onTap: () {
                     Navigator.pop(context);
-                    _navigateToTabOrPush(context, 4); // Index 4 = Profile Tab
+                    if (onTabSelect != null) onTabSelect!(4);
                   },
                 ),
                 ListTile(
@@ -191,7 +193,7 @@ class MyHomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // Search Bar -> Navigates to Search Screen or Callback
+            // Search Bar -> Navigates to Search Screen
             GestureDetector(
               onTap: () => _handleSearchAction(context),
               child: Container(
@@ -238,10 +240,7 @@ class MyHomeScreen extends StatelessWidget {
                 return GestureDetector(
                   onTap: () {
                     if (!isTestPassed) {
-                      _animatedNavigate(
-                        context,
-                        const VerifySkillScreen(),
-                      );
+                      _animatedNavigate(context, const VerifySkillScreen());
                     }
                   },
                   child: buildVerificationBadge(isPassed: isTestPassed),
@@ -383,17 +382,17 @@ class MyHomeScreen extends StatelessWidget {
                 ),
                 _buildQuickActionItem(
                   icon: Icons.assignment_turned_in_rounded,
-                  label: "My Skills",
+                  label: "Verify Skill",
                   color: Colors.purple.shade50,
                   iconColor: Colors.purple,
-                  onTap: () => _navigateToTabOrPush(context, 2), // Index 2: Bookings/Skills
+                  onTap: () => _animatedNavigate(context, const VerifySkillScreen()),
                 ),
                 _buildQuickActionItem(
                   icon: Icons.chat_bubble_outline_rounded,
-                  label: "Messages",
+                  label: "Sessions",
                   color: Colors.red.shade50,
                   iconColor: Colors.redAccent,
-                  onTap: () => _navigateToTabOrPush(context, 3), // Index 3: Chat
+                  onTap: () => _animatedNavigate(context, const SessionHistoryScreen()),
                 ),
               ],
             ),

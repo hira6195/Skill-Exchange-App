@@ -127,18 +127,28 @@ class _VerifySkillScreenState extends State<VerifySkillScreen> {
     });
 
     try {
-      // 1. Upload Certificate & save to Firestore
-      await _certificateService.uploadCertificate(
+      // 1. Upload Certificate & save to Firestore with timeout of 8 seconds
+      await _certificateService
+          .uploadCertificate(
         skillName: skillName,
         certificate: _selectedCertificate!,
+      )
+          .timeout(
+        const Duration(seconds: 8),
+        onTimeout: () => throw "Upload taking too long. Please try again.",
       );
 
-      // 2. Pre-fetch / Validate AI Dynamic Quiz
-      await GeminiService().generateDynamicQuiz(
+      // 2. Background pre-fetch for AI Dynamic Quiz (Non-blocking call to save time)
+      GeminiService()
+          .generateDynamicQuiz(
         skill: skillName,
         certificateText: "Certificate for $skillName",
         targetQuestionCount: 5,
-      );
+      )
+          .catchError((e) {
+        debugPrint("Background Quiz pre-fetch error: $e");
+        return <Map<String, dynamic>>[];
+      });
 
       if (!mounted) return;
 
@@ -150,22 +160,22 @@ class _VerifySkillScreenState extends State<VerifySkillScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Certificate uploaded & Quiz generated successfully"),
+          content: Text("Certificate uploaded successfully!"),
           backgroundColor: Colors.green,
         ),
       );
 
-      // 3. Navigate to Assessment Intro Screen
+      // 3. Immediate Navigation to Assessment Intro Screen
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => AssessmentIntroScreen(
             skillName: skillName,
             certificateText: "Certificate for $skillName",
+            userId: '',
           ),
         ),
       );
-
     } catch (e) {
       if (!mounted) return;
 

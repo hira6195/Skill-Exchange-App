@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:skill_exchange/screens/skill_detail_screen.dart';
+// NOTE: Apne dashboard screen ki file ka path yahan check karke import kar lein
+import 'package:skill_exchange/screens/my_home_screen.dart';
 
 class CategoryCard extends StatelessWidget {
   final String label;
@@ -78,63 +80,86 @@ class _SearchSkillsScreenState extends State<SearchSkillsScreen> {
     });
   }
 
+  // Safe Navigation Function
+  void _navigateBack() {
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    } else {
+      // Agar back jane ka option na ho to root/dashboard par move karein
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9F9FB),
-      appBar: AppBar(
-        title: const Text("Explore Skills", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.black), onPressed: () => Navigator.pop(context)),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _searchController,
-              onChanged: (_) => _runFilter(),
-              decoration: InputDecoration(
-                hintText: "Search skills, technologies...",
-                prefixIcon: const Icon(Icons.search),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _navigateBack();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF9F9FB),
+        appBar: AppBar(
+          title: const Text("Explore Skills", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.black),
+            onPressed: _navigateBack,
+          ),
+        ),
+        body: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _searchController,
+                onChanged: (_) => _runFilter(),
+                decoration: InputDecoration(
+                  hintText: "Search skills, technologies...",
+                  prefixIcon: const Icon(Icons.search),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                CategoryCard(label: "Design", icon: Icons.palette, color: Colors.pinkAccent, isSelected: _selectedCategory == "Design", onTap: () { setState(() => _selectedCategory = _selectedCategory == "Design" ? "" : "Design"); _runFilter(); }),
-                CategoryCard(label: "Development", icon: Icons.code, color: Colors.purple, isSelected: _selectedCategory == "Development", onTap: () { setState(() => _selectedCategory = _selectedCategory == "Development" ? "" : "Development"); _runFilter(); }),
-                CategoryCard(label: "Marketing", icon: Icons.trending_up, color: Colors.blue, isSelected: _selectedCategory == "Marketing", onTap: () { setState(() => _selectedCategory = _selectedCategory == "Marketing" ? "" : "Marketing"); _runFilter(); }),
-                CategoryCard(label: "Business", icon: Icons.business, color: Colors.amber.shade700, isSelected: _selectedCategory == "Business", onTap: () { setState(() => _selectedCategory = _selectedCategory == "Business" ? "" : "Business"); _runFilter(); }),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _filteredSkills.length,
-                itemBuilder: (context, index) {
-                  final item = _filteredSkills[index];
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    child: ListTile(
-                      leading: Icon(item["icon"], color: const Color(0xFF6C5CE7)),
-                      title: Text(item["name"], style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text(item["students"]),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SkillDetailScreen(skillName: item["name"], category: item["category"]))),
-                    ),
-                  );
-                },
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  CategoryCard(label: "Design", icon: Icons.palette, color: Colors.pinkAccent, isSelected: _selectedCategory == "Design", onTap: () { setState(() => _selectedCategory = _selectedCategory == "Design" ? "" : "Design"); _runFilter(); }),
+                  CategoryCard(label: "Development", icon: Icons.code, color: Colors.purple, isSelected: _selectedCategory == "Development", onTap: () { setState(() => _selectedCategory = _selectedCategory == "Development" ? "" : "Development"); _runFilter(); }),
+                  CategoryCard(label: "Marketing", icon: Icons.trending_up, color: Colors.blue, isSelected: _selectedCategory == "Marketing", onTap: () { setState(() => _selectedCategory = _selectedCategory == "Marketing" ? "" : "Marketing"); _runFilter(); }),
+                  CategoryCard(label: "Business", icon: Icons.business, color: Colors.amber.shade700, isSelected: _selectedCategory == "Business", onTap: () { setState(() => _selectedCategory = _selectedCategory == "Business" ? "" : "Business"); _runFilter(); }),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 20),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _filteredSkills.length,
+                  itemBuilder: (context, index) {
+                    final item = _filteredSkills[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: ListTile(
+                        leading: Icon(item["icon"], color: const Color(0xFF6C5CE7)),
+                        title: Text(item["name"], style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text(item["students"]),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => SkillDetailScreen(skillName: item["name"], category: item["category"])),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_gemini/flutter_gemini.dart';
+import 'package:skill_exchange/screens/skills/skills_learn_screen.dart';
 
 // ==========================================================
 // CONFIG / SERVICES / IMPORTS
@@ -16,22 +17,15 @@ import 'package:skill_exchange/screens/splash/splash_screen.dart';
 import 'package:skill_exchange/screens/auth/signup_screen.dart';
 import 'package:skill_exchange/screens/email_verification_screen.dart';
 import 'package:skill_exchange/screens/main_navigation_screen.dart';
-
-// Correct path according to your project structure
 import 'package:skill_exchange/screens/skills/skills_teach_screen.dart';
 
-// ==========================================================
-// 1. MAIN ENTRY POINT
-// ==========================================================
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Firebase Initialization
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Gemini AI Initialization
   Gemini.init(
     apiKey: ApiKey.geminiApiKey,
   );
@@ -39,9 +33,6 @@ void main() async {
   runApp(const MyApp());
 }
 
-// ==========================================================
-// 2. MAIN APP & SESSION WRAPPER
-// ==========================================================
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -83,7 +74,6 @@ class _MainAppWrapperState extends State<MainAppWrapper> {
   @override
   void initState() {
     super.initState();
-    // Start 5-minute development timer
     SessionManager.startSessionTimer(_handleTimeout);
   }
 
@@ -92,7 +82,6 @@ class _MainAppWrapperState extends State<MainAppWrapper> {
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: (_) {
-        // Reset 5 minute timer on user interaction
         SessionManager.resetTimer(_handleTimeout);
       },
       child: const AuthGate(),
@@ -100,9 +89,6 @@ class _MainAppWrapperState extends State<MainAppWrapper> {
   }
 }
 
-// ==========================================================
-// 3. FIRESTORE PROFILE HELPER
-// ==========================================================
 Future<void> saveUserProfileToFirestore({
   required String name,
   required String skill,
@@ -140,9 +126,6 @@ Future<void> saveUserProfileToFirestore({
   }
 }
 
-// ==========================================================
-// 4. AUTH GATE (WITH PROFILE COMPLETION VALIDATION)
-// ==========================================================
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
@@ -154,30 +137,24 @@ class AuthGate extends StatelessWidget {
         if (authSnapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF6A1B9A),
-              ),
+              child: CircularProgressIndicator(color: Color(0xFF6A1B9A)),
             ),
           );
         }
 
-        // 1. User not logged in
         if (!authSnapshot.hasData || authSnapshot.data == null) {
           return const SignupScreen();
         }
 
         final User user = authSnapshot.data!;
 
-        // 2. Refresh user state
         return FutureBuilder<void>(
           future: user.reload(),
           builder: (context, reloadSnapshot) {
             if (reloadSnapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(
                 body: Center(
-                  child: CircularProgressIndicator(
-                    color: Color(0xFF6A1B9A),
-                  ),
+                  child: CircularProgressIndicator(color: Color(0xFF6A1B9A)),
                 ),
               );
             }
@@ -188,44 +165,36 @@ class AuthGate extends StatelessWidget {
               return const SignupScreen();
             }
 
-            // 3. Check Email Verification
             if (!refreshedUser.emailVerified) {
               return const EmailVerificationScreen();
             }
 
-            // 4. Check Firestore User Document & Profile Completion
-            return StreamBuilder<DocumentSnapshot>(
-              stream: FirebaseFirestore.instance
+            return FutureBuilder<DocumentSnapshot>(
+              future: FirebaseFirestore.instance
                   .collection("users")
                   .doc(refreshedUser.uid)
-                  .snapshots(),
+                  .get(),
               builder: (context, firestoreSnapshot) {
                 if (firestoreSnapshot.connectionState == ConnectionState.waiting) {
                   return const Scaffold(
                     body: Center(
-                      child: CircularProgressIndicator(
-                        color: Color(0xFF6A1B9A),
-                      ),
+                      child: CircularProgressIndicator(color: Color(0xFF6A1B9A)),
                     ),
                   );
                 }
 
                 if (firestoreSnapshot.hasData && firestoreSnapshot.data!.exists) {
                   final data = firestoreSnapshot.data!.data() as Map<String, dynamic>?;
-
                   final bool isProfileCompleted = data?['isProfileCompleted'] ?? false;
 
-                  // If profile is not completed, redirect to Skills Screen
                   if (!isProfileCompleted) {
                     return const SkillsTeachScreen();
                   }
 
-                  // If profile is completed, show Main Navigation Screen
                   return const MainNavigationScreen();
                 }
 
-                // If user document does not exist yet
-                return const SkillsTeachScreen();
+                return const SkillsLearnScreen();
               },
             );
           },

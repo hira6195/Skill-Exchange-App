@@ -75,6 +75,8 @@ class _ExpertBookingScreenState extends State<ExpertBookingScreen> {
                   expertName: expert.name,
                   skill: expert.skill,
                   amount: 0.0,
+                  totalSessions: 1,
+                  sessionNumber: 1,
                 );
 
                 if (!mounted) return;

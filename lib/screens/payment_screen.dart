@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:skill_exchange/screens/main_navigation_screen.dart';
 
 class PaymentScreen extends StatefulWidget {
   final String planName;
@@ -129,7 +130,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ),
             onPressed: () {
               Navigator.pop(context); // Dismiss Dialog
-              Navigator.pop(context); // Return to Screen
+              // Payment ke baad seedha app ke home par (premium user ko Premium Dashboard milta hai)
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
+                    (route) => false,
+              );
             },
             child: const Text("Done", style: TextStyle(color: Colors.white)),
           )

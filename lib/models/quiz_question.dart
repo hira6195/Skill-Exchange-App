@@ -5,6 +5,7 @@ class QuizQuestion {
   final String difficulty;
   final String topic;
   final String question;
+  final String? codeSnippet;
   final List<String> options;
   final int correctOptionIndex;
   final String explanation;
@@ -15,6 +16,7 @@ class QuizQuestion {
     required this.difficulty,
     required this.topic,
     required this.question,
+    this.codeSnippet,
     required this.options,
     required this.correctOptionIndex,
     required this.explanation,
@@ -23,17 +25,14 @@ class QuizQuestion {
   factory QuizQuestion.fromJson(Map<String, dynamic> json) {
     List<String> parsedOptions = List<String>.from(json['options'] ?? []);
 
-    // Extract raw index with fallback keys
     int rawIndex = (json['correctOptionIndex'] ??
         json['correct_option_index'] ??
         0) as int;
 
-    // Safe Index Normalization: Convert 1-based index (1, 2, 3, 4) to 0-based index
     if (parsedOptions.isNotEmpty) {
       if (rawIndex >= parsedOptions.length && rawIndex > 0) {
         rawIndex = rawIndex - 1;
       }
-      // Out of bounds safety guard
       if (rawIndex < 0 || rawIndex >= parsedOptions.length) {
         rawIndex = 0;
       }
@@ -47,6 +46,7 @@ class QuizQuestion {
       difficulty: json['difficulty']?.toString() ?? 'Medium',
       topic: json['topic']?.toString() ?? '',
       question: json['question']?.toString() ?? '',
+      codeSnippet: json['codeSnippet']?.toString(),
       options: parsedOptions,
       correctOptionIndex: rawIndex,
       explanation: json['explanation']?.toString() ?? '',
@@ -60,6 +60,7 @@ class QuizQuestion {
       'difficulty': difficulty,
       'topic': topic,
       'question': question,
+      'codeSnippet': codeSnippet,
       'options': options,
       'correctOptionIndex': correctOptionIndex,
       'explanation': explanation,
@@ -75,6 +76,7 @@ class QuestionData {
   final String topic;
   final int timeInSeconds;
   final String question;
+  final String? codeSnippet;
   final List<String> options;
   final int correctOptionIndex;
   final String correctAnswer;
@@ -87,6 +89,7 @@ class QuestionData {
     required this.topic,
     required this.timeInSeconds,
     required this.question,
+    this.codeSnippet,
     required this.options,
     required this.correctOptionIndex,
     required this.correctAnswer,
@@ -96,12 +99,10 @@ class QuestionData {
   factory QuestionData.fromJson(Map<String, dynamic> json) {
     List<String> parsedOptions = List<String>.from(json['options'] ?? []);
 
-    // Extract raw index with fallback keys
     int rawIndex = (json['correctOptionIndex'] ??
         json['correct_option_index'] ??
         0) as int;
 
-    // Safe Index Normalization
     if (parsedOptions.isNotEmpty) {
       if (rawIndex >= parsedOptions.length && rawIndex > 0) {
         rawIndex = rawIndex - 1;
@@ -128,6 +129,7 @@ class QuestionData {
       timeInSeconds:
       (json['timeInSeconds'] ?? json['time_in_seconds'] ?? 60) as int,
       question: json['question']?.toString() ?? '',
+      codeSnippet: json['codeSnippet']?.toString() ?? json['code_snippet']?.toString(),
       options: parsedOptions,
       correctOptionIndex: rawIndex,
       correctAnswer: answerText,
@@ -143,6 +145,7 @@ class QuestionData {
       'topic': topic,
       'timeInSeconds': timeInSeconds,
       'question': question,
+      'codeSnippet': codeSnippet,
       'options': options,
       'correctOptionIndex': correctOptionIndex,
       'correctAnswer': correctAnswer,

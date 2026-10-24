@@ -33,6 +33,7 @@ class _BookingScreenState extends State<BookingScreen> {
   String? _selectedTime;
   String _sessionType = 'Online';
   String _selectedDuration = '60 Minutes';
+  int _totalSessions = 1;
   bool _isSubmitting = false;
 
   final List<String> _timeSlots = [
@@ -49,6 +50,8 @@ class _BookingScreenState extends State<BookingScreen> {
     '60 Minutes',
     '90 Minutes',
   ];
+
+  final List<int> _sessionCounts = [1, 3, 5, 10];
 
   @override
   void dispose() {
@@ -106,17 +109,21 @@ class _BookingScreenState extends State<BookingScreen> {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
-    // Dynamic Real Data match directly passed to database
+    // Total package amount passed; service divides it per session
+    final double totalAmount = (widget.hourlyRate > 0 ? widget.hourlyRate : 0.0) * _totalSessions;
+
     final success = await _bookingService.createBooking(
       expertId: widget.expertId,
       expertName: widget.expertName.isNotEmpty ? widget.expertName : 'Matched Expert',
       skill: widget.skill.isNotEmpty ? widget.skill : 'Matched Skill',
-      amount: widget.hourlyRate,
+      amount: totalAmount,
       date: _selectedDate,
       sessionTime: _selectedTime!,
       sessionType: _sessionType,
       duration: _selectedDuration,
       notes: _notesController.text.trim(),
+      totalSessions: _totalSessions,
+      sessionNumber: 1,
     );
 
     if (success && widget.expertId.isNotEmpty) {
@@ -125,10 +132,10 @@ class _BookingScreenState extends State<BookingScreen> {
         await _chatService.sendMessage(
           chatId,
           widget.expertId,
-          "Hello! I've booked a ${_selectedDuration} ${_sessionType} session for ${widget.skill} on ${DateFormat('dd MMMM yyyy').format(_selectedDate!)} at ${_selectedTime!}.",
+          "Hello! I've booked $_totalSessions session(s) (${_selectedDuration} ${_sessionType}) for ${widget.skill}. First session starts on ${DateFormat('dd MMMM yyyy').format(_selectedDate!)} at ${_selectedTime!}.",
         );
       } catch (e) {
-        debugPrint("Chat initiation auto-message error: $e");
+        debugPrint("Chat auto-message error: $e");
       }
     }
 
@@ -141,7 +148,7 @@ class _BookingScreenState extends State<BookingScreen> {
     if (success) {
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Booking Confirmed for ${widget.skill} with ${widget.expertName}!'),
+          content: Text('All $_totalSessions Session(s) Scheduled Successfully!'),
           backgroundColor: Colors.green,
         ),
       );
@@ -154,7 +161,7 @@ class _BookingScreenState extends State<BookingScreen> {
     } else {
       messenger.showSnackBar(
         const SnackBar(
-          content: Text('Failed to confirm booking. Please try again.'),
+          content: Text('Failed to confirm booking. A selected date/slot might already be booked.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -170,7 +177,7 @@ class _BookingScreenState extends State<BookingScreen> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         title: const Text(
-          'Book Session',
+          'Book Session Series',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         leading: IconButton(
@@ -186,7 +193,36 @@ class _BookingScreenState extends State<BookingScreen> {
             _buildExpertCard(),
             const SizedBox(height: 24),
             const Text(
-              'Select Date',
+              'Select Number of Sessions',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              children: _sessionCounts.map((count) {
+                final isSelected = _totalSessions == count;
+                return ChoiceChip(
+                  label: Text('$count ${count == 1 ? "Session" : "Sessions"}'),
+                  selected: isSelected,
+                  selectedColor: Colors.deepPurple,
+                  backgroundColor: Colors.white,
+                  labelStyle: TextStyle(
+                    color: isSelected ? Colors.white : Colors.black87,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                  onSelected: (selected) {
+                    if (selected) {
+                      setState(() {
+                        _totalSessions = count;
+                      });
+                    }
+                  },
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'First Session Date',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
@@ -205,16 +241,12 @@ class _BookingScreenState extends State<BookingScreen> {
                   children: [
                     Text(
                       _selectedDate == null
-                          ? 'Choose Date'
+                          ? 'Choose Start Date'
                           : DateFormat('dd MMMM yyyy').format(_selectedDate!),
                       style: TextStyle(
                         fontSize: 15,
-                        color: _selectedDate == null
-                            ? Colors.grey.shade500
-                            : Colors.black87,
-                        fontWeight: _selectedDate == null
-                            ? FontWeight.normal
-                            : FontWeight.w600,
+                        color: _selectedDate == null ? Colors.grey.shade500 : Colors.black87,
+                        fontWeight: _selectedDate == null ? FontWeight.normal : FontWeight.w600,
                       ),
                     ),
                     const Icon(Icons.calendar_month_rounded, color: Colors.deepPurple),
@@ -290,7 +322,7 @@ class _BookingScreenState extends State<BookingScreen> {
             ),
             const SizedBox(height: 20),
             const Text(
-              'Duration',
+              'Duration Per Session',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
@@ -323,7 +355,7 @@ class _BookingScreenState extends State<BookingScreen> {
             ),
             const SizedBox(height: 24),
             const Text(
-              'Notes (Optional)',
+              'Notes / Learning Goals (Optional)',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
@@ -331,7 +363,7 @@ class _BookingScreenState extends State<BookingScreen> {
               controller: _notesController,
               maxLines: 3,
               decoration: InputDecoration(
-                hintText: 'Write your learning goals...',
+                hintText: 'Write your goals for this session series...',
                 hintStyle: TextStyle(color: Colors.grey.shade400),
                 filled: true,
                 fillColor: Colors.white,
@@ -367,9 +399,9 @@ class _BookingScreenState extends State<BookingScreen> {
                     strokeWidth: 2.5,
                   ),
                 )
-                    : const Text(
-                  'Confirm Booking',
-                  style: TextStyle(
+                    : Text(
+                  'Confirm Booking ($_totalSessions ${_totalSessions == 1 ? "Session" : "Sessions"})',
+                  style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
@@ -402,9 +434,7 @@ class _BookingScreenState extends State<BookingScreen> {
           CircleAvatar(
             radius: 30,
             backgroundColor: Colors.deepPurple.shade100,
-            backgroundImage: widget.expertImage.isNotEmpty
-                ? NetworkImage(widget.expertImage)
-                : null,
+            backgroundImage: widget.expertImage.isNotEmpty ? NetworkImage(widget.expertImage) : null,
             child: widget.expertImage.isEmpty
                 ? Text(
               widget.expertName.isNotEmpty ? widget.expertName[0].toUpperCase() : 'E',

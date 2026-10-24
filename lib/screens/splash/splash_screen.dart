@@ -150,57 +150,15 @@ class _SplashScreenState extends State<SplashScreen>
     });
 
     try {
-      User? user = FirebaseAuth.instance.currentUser;
-
       if (!mounted) return;
 
-      // Case 1: No User Logged in -> Auth Screen
-      if (user == null) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const AuthGate()),
-        );
-        return;
-      }
-
-      // Case 2: Fetch Firestore document & Check Profile/Premium status
-      DocumentSnapshot userDoc = await FirebaseFirestore.instance
-          .collection("users")
-          .doc(user.uid)
-          .get();
-
-      if (!mounted) return;
-
-      if (userDoc.exists && userDoc.data() != null) {
-        Map<String, dynamic> data = userDoc.data() as Map<String, dynamic>;
-        bool isProfileCompleted = data["isProfileCompleted"] ?? false;
-        bool isPremium = data["isPremium"] ?? false;
-
-        if (!isProfileCompleted) {
-          // Profile active nahi hai to sabse pehle profile banana lazmi hai
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const ProfileScreen()),
-          );
-        } else if (isPremium) {
-          // Direct Premium Dashboard route
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const PremiumDashboardScreen()),
-          );
-        } else {
-          // Standard Free User Dashboard route
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const HomeScreen()),
-          );
-        }
-      } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const ProfileScreen()),
-        );
-      }
+      // Unconditionally route to AuthGate.
+      // AuthGate will act as the single source of truth for app routing,
+      // handling auth checks, verification, profile completion, and navigation.
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const AuthGate()),
+      );
     } catch (e) {
       if (!mounted) return;
       Navigator.pushReplacement(

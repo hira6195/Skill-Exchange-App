@@ -1,8 +1,9 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:skill_exchange/screens/auth/auth_gate.dart';
 import 'package:skill_exchange/screens/email_verification_screen.dart';
 import 'package:skill_exchange/screens/auth/login_screen.dart';
 
@@ -17,8 +18,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-  final TextEditingController confirmPasswordController =
-  TextEditingController();
+  final TextEditingController confirmPasswordController = TextEditingController();
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -26,62 +26,44 @@ class _SignupScreenState extends State<SignupScreen> {
   bool hidePassword = true;
   bool hideConfirmPassword = true;
   bool isLoading = false;
+  bool isGoogleLoading = false;
 
   final Color primaryPurple = const Color(0xff6C25A8);
   final Color fieldBgColor = const Color(0xffF3F4F6);
 
-  // ----------------------------------------------------------
-  // EMAIL VALIDATION
-  // ----------------------------------------------------------
-
   bool isValidEmail(String email) {
-    return RegExp(
-      r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
-    ).hasMatch(email.trim());
+    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email.trim());
   }
-
-  // ----------------------------------------------------------
-  // PASSWORD VALIDATION
-  // ----------------------------------------------------------
 
   String? validatePassword(String password) {
     if (password.length < 8) {
       return "Password must be at least 8 characters.";
     }
-
     if (!RegExp(r'[A-Z]').hasMatch(password)) {
       return "Password must contain at least one uppercase letter.";
     }
-
     if (!RegExp(r'[a-z]').hasMatch(password)) {
       return "Password must contain at least one lowercase letter.";
     }
-
     if (!RegExp(r'[0-9]').hasMatch(password)) {
       return "Password must contain at least one number.";
     }
-
     if (!RegExp(r'[!@#$%^&*(),.?":{}|<>_\-]').hasMatch(password)) {
       return "Password must contain at least one special character.";
     }
-
     return null;
   }
 
-  // ----------------------------------------------------------
-  // SIGN UP
-  // ----------------------------------------------------------
-
+  // ==========================================================
+  // MANUAL SIGNUP LOGIC (INCLUDES EMAIL VERIFICATION SCREEN)
+  // ==========================================================
   Future<void> signupUser() async {
     final String name = nameController.text.trim();
     final String email = emailController.text.trim().toLowerCase();
     final String password = passwordController.text;
     final String confirmPassword = confirmPasswordController.text;
 
-    if (name.isEmpty ||
-        email.isEmpty ||
-        password.isEmpty ||
-        confirmPassword.isEmpty) {
+    if (name.isEmpty || email.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
       showMessage("Please fill in all fields.", isError: true);
       return;
     }
@@ -112,24 +94,18 @@ class _SignupScreenState extends State<SignupScreen> {
     });
 
     try {
-      // 1. CREATE FIREBASE AUTH ACCOUNT
-      final UserCredential userCredential =
-      await _auth.createUserWithEmailAndPassword(
+      // 1. Create user in Firebase Authentication[cite: 5]
+      final UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
       final User? user = userCredential.user;
-      if (user == null) {
-        throw Exception("Unable to create account.");
-      }
+      if (user == null) throw Exception("Unable to create account.");
 
-      // 2. SAVE DISPLAY NAME IN FIREBASE AUTH
       await user.updateDisplayName(name);
-// 3. SEND FIREBASE VERIFICATION EMAIL
-      await user.sendEmailVerification();
 
-      // 4. CREATE FIRESTORE USER DOCUMENT
+      // 2. Save record to Firestore FIRST so the document definitely exists[cite: 5]
       await _firestore.collection("users").doc(user.uid).set({
         "uid": user.uid,
         "name": name,
@@ -148,20 +124,18 @@ class _SignupScreenState extends State<SignupScreen> {
         "createdAt": FieldValue.serverTimestamp(),
       });
 
+      // 3. Send email verification after Firestore document is successfully created[cite: 5]
+      await user.sendEmailVerification();
+
       if (!mounted) return;
 
-      // 5. GO TO EMAIL VERIFICATION SCREEN
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(
-          builder: (context) => const EmailVerificationScreen(),
-        ),
+        MaterialPageRoute(builder: (context) => const EmailVerificationScreen()),
             (route) => false,
       );
     } on FirebaseAuthException catch (e) {
-      debugPrint("FIREBASE AUTH ERROR: [${e.code}] ${e.message}");
       if (!mounted) return;
-
       String message;
       switch (e.code) {
         case "email-already-in-use":
@@ -171,58 +145,103 @@ class _SignupScreenState extends State<SignupScreen> {
           message = "Please enter a valid email address.";
           break;
         case "weak-password":
-          message = "Password is too weak. Please use a stronger password.";
-          break;
-        case "operation-not-allowed":
-          message = "Email/password authentication is currently disabled.";
-          break;
-        case "network-request-failed":
-          message = "Network error. Please check your internet connection.";
-          break;
-        case "too-many-requests":
-          message = "Too many attempts. Please wait and try again.";
+          message = "Password is too weak.";
           break;
         default:
-          message = e.message ?? "Unable to create your account.";
+          message = e.message ?? "Unable to create account.";
       }
-
       showMessage(message, isError: true);
     } catch (e) {
-      debugPrint("FULL SIGNUP ERROR: $e");
       if (!mounted) return;
-
       showMessage("Error: ${e.toString()}", isError: true);
     } finally {
-      if (mounted) {
-        setState(() {
-          isLoading = false;
-        });
-      }
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
-  // ----------------------------------------------------------
-  // MESSAGE
-  // ----------------------------------------------------------
+  // ==========================================================
+  // PROFESSIONAL GOOGLE SIGN IN LOGIC (SHOWS EMAIL PICKER POPUP)
+  // ==========================================================
+  Future<void> signUpWithGoogle() async {
+    setState(() {
+      isGoogleLoading = true;
+    });
 
-  void showMessage(
-      String message, {
-        bool isError = false,
-      }) {
+    try {
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+
+      // Forces the Google account chooser pop-up to appear every time
+      await googleSignIn.signOut();
+
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        setState(() {
+          isGoogleLoading = false;
+        });
+        return;
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      UserCredential userCredential = await _auth.signInWithCredential(credential);
+      User? user = userCredential.user;
+
+      if (user != null) {
+        DocumentSnapshot userDoc =
+        await _firestore.collection('users').doc(user.uid).get();
+
+        if (!userDoc.exists) {
+          await _firestore.collection('users').doc(user.uid).set({
+            "uid": user.uid,
+            "name": user.displayName ?? "User",
+            "email": user.email ?? "",
+            "role": "Learner",
+            "profileImage": user.photoURL ?? "",
+            "bio": "",
+            "skills": [],
+            "verified": true,
+            "isEmailVerified": true, // Automatically verified by Google
+            "rating": 0,
+            "totalSessions": 0,
+            "isProfileCompleted": false,
+            "isPremium": false,
+            "subscriptionPlan": "Basic",
+            "createdAt": FieldValue.serverTimestamp(),
+          });
+        }
+      }
+
+      if (!mounted) return;
+
+      // Direct entry to main app
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const AuthGate()),
+            (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      showMessage("Google Sign-In failed: $e", isError: true);
+    } finally {
+      if (mounted) setState(() => isGoogleLoading = false);
+    }
+  }
+
+  void showMessage(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor:
-        isError ? Colors.red.shade700 : Colors.green.shade700,
+        backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
         behavior: SnackBarBehavior.floating,
       ),
     );
   }
-
-  // ----------------------------------------------------------
-  // BUILD
-  // ----------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -244,15 +263,9 @@ class _SignupScreenState extends State<SignupScreen> {
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 20,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 32,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(28),
@@ -267,11 +280,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.school,
-                      size: 65,
-                      color: primaryPurple,
-                    ),
+                    Icon(Icons.school, size: 65, color: primaryPurple),
                     const SizedBox(height: 12),
                     Text(
                       "Create Account",
@@ -309,22 +318,14 @@ class _SignupScreenState extends State<SignupScreen> {
                       controller: passwordController,
                       hint: "Password",
                       hideText: hidePassword,
-                      onToggle: () {
-                        setState(() {
-                          hidePassword = !hidePassword;
-                        });
-                      },
+                      onToggle: () => setState(() => hidePassword = !hidePassword),
                     ),
                     const SizedBox(height: 14),
                     buildPasswordField(
                       controller: confirmPasswordController,
                       hint: "Confirm Password",
                       hideText: hideConfirmPassword,
-                      onToggle: () {
-                        setState(() {
-                          hideConfirmPassword = !hideConfirmPassword;
-                        });
-                      },
+                      onToggle: () => setState(() => hideConfirmPassword = !hideConfirmPassword),
                     ),
                     const SizedBox(height: 12),
                     Align(
@@ -342,7 +343,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       width: double.infinity,
                       height: 52,
                       child: ElevatedButton(
-                        onPressed: isLoading ? null : signupUser,
+                        onPressed: (isLoading || isGoogleLoading) ? null : signupUser,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: primaryPurple,
                           elevation: 0,
@@ -366,6 +367,58 @@ class _SignupScreenState extends State<SignupScreen> {
                             fontWeight: FontWeight.w600,
                             color: Colors.white,
                           ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(child: Divider(color: Colors.grey.shade300)),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          child: Text("OR", style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600)),
+                        ),
+                        Expanded(child: Divider(color: Colors.grey.shade300)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          side: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        onPressed: (isLoading || isGoogleLoading) ? null : signUpWithGoogle,
+                        child: isGoogleLoading
+                            ? SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(
+                            color: primaryPurple,
+                            strokeWidth: 2,
+                          ),
+                        )
+                            : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Image.network(
+                              'https://cdn-icons-png.flaticon.com/512/300/300221.png',
+                              height: 22,
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              "Continue with Google",
+                              style: GoogleFonts.poppins(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -410,10 +463,6 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
-  // ----------------------------------------------------------
-  // INPUT FIELD
-  // ----------------------------------------------------------
-
   Widget buildInputField({
     required TextEditingController controller,
     required String hint,
@@ -431,11 +480,7 @@ class _SignupScreenState extends State<SignupScreen> {
           color: Colors.grey.shade500,
           fontSize: 14,
         ),
-        prefixIcon: Icon(
-          icon,
-          color: primaryPurple,
-          size: 20,
-        ),
+        prefixIcon: Icon(icon, color: primaryPurple, size: 20),
         filled: true,
         fillColor: fieldBgColor,
         contentPadding: const EdgeInsets.symmetric(vertical: 16),
@@ -446,10 +491,6 @@ class _SignupScreenState extends State<SignupScreen> {
       ),
     );
   }
-
-  // ----------------------------------------------------------
-  // PASSWORD FIELD
-  // ----------------------------------------------------------
 
   Widget buildPasswordField({
     required TextEditingController controller,
@@ -468,11 +509,7 @@ class _SignupScreenState extends State<SignupScreen> {
           color: Colors.grey.shade500,
           fontSize: 14,
         ),
-        prefixIcon: Icon(
-          Icons.lock_outline,
-          color: primaryPurple,
-          size: 20,
-        ),
+        prefixIcon: Icon(Icons.lock_outline, color: primaryPurple, size: 20),
         suffixIcon: IconButton(
           onPressed: onToggle,
           icon: Icon(
@@ -491,10 +528,6 @@ class _SignupScreenState extends State<SignupScreen> {
       ),
     );
   }
-
-  // ----------------------------------------------------------
-  // DISPOSE
-  // ----------------------------------------------------------
 
   @override
   void dispose() {

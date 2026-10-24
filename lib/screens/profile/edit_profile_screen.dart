@@ -514,13 +514,16 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                       child: SizedBox(
                         height: 52,
                         child: OutlinedButton(
-                          onPressed: () {
-                            Navigator.push(
+                          onPressed: () async {
+                            final result = await Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => const AddNewSkillScreen(),
                               ),
                             );
+                            if (result == true && mounted) {
+                              _loadCurrentUserData();
+                            }
                           },
                           style: OutlinedButton.styleFrom(
                             backgroundColor: const Color(0xFFF3E8FF),

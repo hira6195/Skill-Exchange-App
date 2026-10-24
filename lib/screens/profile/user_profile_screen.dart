@@ -59,7 +59,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     super.dispose();
   }
 
-  // Fixed: Checked both photoUrl & profileImage to sync properly
   String getProfileImage(Map<String, dynamic>? userData) {
     if (userData == null) return _defaultAvatar;
 
@@ -482,17 +481,17 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           Text(
             value.toString(),
             style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 22,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
               color: primaryColor,
             ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           Text(
             title,
-            style: TextStyle(
-              color: Colors.grey.shade600,
+            style: const TextStyle(
               fontSize: 12,
+              color: Colors.grey,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -520,7 +519,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            "About Me",
+            "About",
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -529,10 +528,10 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           ),
           const SizedBox(height: 8),
           Text(
-            userData["aboutMe"] ?? userData["About Me"] ?? "No bio description added yet.",
+            userData["about"] ?? userData["bio"] ?? "No additional information provided.",
             style: TextStyle(
+              fontSize: 13,
               color: Colors.grey.shade700,
-              fontSize: 13.5,
               height: 1.4,
             ),
           ),
@@ -541,60 +540,74 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     );
   }
 
-  Widget _buildSkillSection(String title, dynamic skills, Color accentColor) {
-    List skillList = skills is List ? skills : [];
+  Widget _buildSkillSection(String title, dynamic skillsData, Color color) {
+    List<String> skills = [];
+    if (skillsData is List) {
+      for (var item in skillsData) {
+        if (item is Map && item.containsKey('name')) {
+          skills.add(item['name'].toString());
+        } else if (item != null && item.toString().trim().isNotEmpty) {
+          skills.add(item.toString());
+        }
+      }
+    }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF1E1B29),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
-        ),
-        const SizedBox(height: 10),
-        skillList.isEmpty
-            ? Text(
-          "No skills specified.",
-          style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-        )
-            : Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: skillList.map<Widget>((skill) {
-            String displayName = "";
-            if (skill is Map) {
-              displayName = skill["name"]?.toString() ?? "";
-            } else {
-              displayName = skill.toString();
-            }
-
-            if (displayName.isEmpty) return const SizedBox.shrink();
-
-            return Container(
-              padding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: accentColor.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                    color: accentColor.withValues(alpha: 0.3)),
-              ),
-              child: Text(
-                displayName,
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: accentColor,
-                  fontSize: 13,
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E1B29),
+            ),
+          ),
+          const SizedBox(height: 12),
+          skills.isEmpty
+              ? Text(
+            "No skills added yet.",
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+          )
+              : Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: skills.map((skill) {
+              return Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: color.withValues(alpha: 0.3)),
                 ),
-              ),
-            );
-          }).toList(),
-        ),
-      ],
+                child: Text(
+                  skill,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -118,10 +118,11 @@ class _AddNewSkillScreenState extends State<AddNewSkillScreen>
         "createdAt": Timestamp.now(),
       };
 
-      // Free Plan: Purana skill REPLACE ho kar naya skill Overwrite ho jayega
-      await _firestore.collection("users").doc(user.uid).update({
-        dbField: [skillData]
-      });
+      // Update or replace skill in Firestore safely
+      await _firestore.collection("users").doc(user.uid).set({
+        dbField: [skillData],
+        if (_skillType == "teach") "expertAt": skillName,
+      }, SetOptions(merge: true));
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

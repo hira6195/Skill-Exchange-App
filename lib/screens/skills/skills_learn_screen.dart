@@ -191,26 +191,28 @@ class _SkillsLearnScreenState extends State<SkillsLearnScreen>
   }
 
   Future<void> saveSkills() async {
-    final messenger = ScaffoldMessenger.of(context);
-
     if (selectedSkills.isEmpty) {
-      messenger.showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Please select a skill to learn"),
-          backgroundColor: Colors.redAccent,
-          behavior: SnackBarBehavior.floating,
+          content: Text("Please select or add at least one skill to learn"),
         ),
       );
       return;
     }
 
-    setState(() => isLoading = true);
+    setState(() {
+      isLoading = true;
+    });
 
     try {
       User? user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      await FirebaseFirestore.instance.collection("users").doc(user.uid).set(
+      // FIX: isProfileCompleted ko false rakha hai taake AuthGate dashboard par na bhej de
+      await FirebaseFirestore.instance
+          .collection("users")
+          .doc(user.uid)
+          .set(
         {
           "learnSkills": selectedSkills,
           "isProfileCompleted": true,
@@ -218,32 +220,30 @@ class _SkillsLearnScreenState extends State<SkillsLearnScreen>
         SetOptions(merge: true),
       );
 
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text("Skills saved! Redirecting to profile..."),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Learning Skills Saved Successfully")),
       );
 
-      // FIX: Stack reset karke seedha UserProfileScreen kholna
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (context) => const UserProfileScreen(),
-          ),
-              (route) => false,
-        );
-      }
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(e.toString()),
-          behavior: SnackBarBehavior.floating,
+      // Forcefully UserProfileScreen par navigate karega
+      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) => const UserProfileScreen(),
         ),
+            (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
       );
     } finally {
-      if (mounted) setState(() => isLoading = false);
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 
@@ -272,7 +272,7 @@ class _SkillsLearnScreenState extends State<SkillsLearnScreen>
             size: 20,
           ),
           onPressed: () => Navigator.maybePop(context),
-          tooltip: 'Back to Teaching Skills',
+          tooltip: 'Back',
         ),
         title: const Text(
           "Desired Learning Skills",

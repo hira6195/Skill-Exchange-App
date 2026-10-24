@@ -103,7 +103,7 @@ Return strictly valid raw JSON array of objects with "uid" (string) and "matchPe
 
       final response = await _retry(
             () => _gemini.prompt(parts: [Part.text(prompt)]),
-      );
+      ).timeout(const Duration(seconds: 6));
 
       final String? outputText = response?.output;
       if (outputText != null && outputText.isNotEmpty) {
@@ -120,7 +120,7 @@ Return strictly valid raw JSON array of objects with "uid" (string) and "matchPe
     try {
       final response = await _retry(
             () => _gemini.prompt(parts: [Part.text(prompt)]),
-      );
+      ).timeout(const Duration(seconds: 6));
       return response?.output ?? '';
     } catch (e) {
       if (kDebugMode) debugPrint("generateText Error: $e");
@@ -158,7 +158,7 @@ Return ONLY valid JSON matching this schema:
             Part.text(prompt),
           ],
         ),
-      );
+      ).timeout(const Duration(seconds: 8));
 
       final String? outputText = response?.output;
       if (outputText != null && outputText.isNotEmpty) {
@@ -225,7 +225,6 @@ Return ONLY valid JSON matching this schema:
   }) async {
     final String targetSkill = subject ?? skill;
 
-    // Strict enforcement: Minimum 10, Maximum 20
     final int questionCount = targetQuestionCount < 10
         ? 10
         : (targetQuestionCount > 20 ? 20 : targetQuestionCount);
@@ -235,29 +234,30 @@ Return ONLY valid JSON matching this schema:
       final int randomSeed = Random().nextInt(999999);
 
       final String prompt = '''
-Create a robust, completely unique assessment test based on Certificate context and Skill parameters.
-TARGET SKILL: "$targetSkill"
-CERTIFICATE DETAILS: "${certificateText.isNotEmpty ? certificateText : 'N/A'}"
+You are an expert technical examiner evaluating candidate skills in "$targetSkill".
+CERTIFICATE CONTEXT: "${certificateText.isNotEmpty ? certificateText : 'N/A'}"
 EXTRACTED TOPICS: ${extractedTopics.isNotEmpty ? jsonEncode(extractedTopics) : '[]'}
-EXACT QUESTION COUNT REQUIRED: $questionCount (Strictly between 10 and 20)
-RANDOM SEEDS: $timestampSeed, $randomSeed
+EXACT QUESTION COUNT REQUIRED: $questionCount
 
-STRICT CRITICAL REQUIREMENTS:
-1. Every single question string MUST BE completely unique. NO REPETITION allowed.
-2. Formulate questions based ON THE CERTIFICATE TEXT AND TOPICS provided above.
-3. Mix Question Types dynamically:
+IMPORTANT INSTRUCTIONS FOR QUESTION DIVERSITY AND AUTHENTICITY:
+1. Generate EXACTLY $questionCount distinct, highly authentic, professional-level questions directly related to "$targetSkill" and certificate parameters.
+2. DO NOT repeat any question idea, concept, or scenario across different questions. Each question MUST test a completely different sub-topic.
+3. Mix question types strictly:
    - MCQs ("type": "mcq", 4 choices)
-   - Scenario Based Problems ("type": "scenario")
+   - Scenario Based Problems ("type": "scenario", 4 choices or open context)
    - Short Technical Conceptual Questions ("type": "short", empty options [], "correctOptionIndex": -1)
    - Coding / Architecture Logic ("type": "coding")
+4. Ensure questions directly assess realistic industry-level knowledge for "$targetSkill" (e.g., edge cases, architecture, troubleshooting, best practices).
 
-Strictly Return Raw JSON (No Markdown):
+Random Seed Timestamps: $timestampSeed, $randomSeed
+
+Strictly Return Raw JSON (No Markdown Backticks):
 {
   "difficulty": "Adaptive",
-  "questionTypeStats": {"mcq": 5, "scenario": 3, "short": 2, "coding": 2},
-  "totalTime": 900,
+  "questionTypeStats": {"mcq": ${questionCount ~/ 2}, "scenario": ${questionCount ~/ 4}, "short": ${questionCount ~/ 4}},
+  "totalTime": ${questionCount * 60},
   "totalQuestions": $questionCount,
-  "estimatedTimeMinutes": 15,
+  "estimatedTimeMinutes": ${questionCount ~/ 1.2},
   "passingScorePercentage": 70,
   "questions": [
     {
@@ -266,11 +266,11 @@ Strictly Return Raw JSON (No Markdown):
       "difficulty": "Hard",
       "topic": "$targetSkill Architecture",
       "timeInSeconds": 60,
-      "question": "Sample unique question string derived from certificate context?",
+      "question": "Sample highly authentic, unique question text?",
       "options": ["Option A", "Option B", "Option C", "Option D"],
       "correctOptionIndex": 0,
       "correctAnswer": "Option A",
-      "explanation": "Detailed explanation of solution."
+      "explanation": "Detailed explanation of technical solution."
     }
   ]
 }
@@ -278,7 +278,8 @@ Strictly Return Raw JSON (No Markdown):
 
       final response = await _retry(
             () => _gemini.prompt(parts: [Part.text(prompt)]),
-      );
+      ).timeout(const Duration(seconds: 8));
+
       final String? outputText = response?.output;
 
       if (outputText != null && outputText.isNotEmpty) {
@@ -286,7 +287,6 @@ Strictly Return Raw JSON (No Markdown):
         final Map<String, dynamic> data = jsonDecode(cleanedText);
         List<dynamic> rawQuestions = data["questions"] ?? [];
 
-        // Deduplication Engine
         List<QuestionData> parsedQuestions = [];
         Set<String> seenQuestions = {};
 
@@ -301,7 +301,7 @@ Strictly Return Raw JSON (No Markdown):
           }
         }
 
-        if (parsedQuestions.length >= 10) {
+        if (parsedQuestions.isNotEmpty) {
           return AssessmentQuizData(
             difficulty: data["difficulty"] ?? "Adaptive",
             questionTypeStats: Map<String, int>.from(
@@ -333,24 +333,26 @@ Strictly Return Raw JSON (No Markdown):
         id: "fb_q_${seed}_$index",
         type: qType,
         difficulty: index % 2 == 0 ? "Medium" : "Hard",
-        topic: "$skill Topic #${index + 1}",
+        topic: "$skill Advanced Topic #${index + 1}",
         timeInSeconds: 60,
         question: qType == "short"
-            ? "Explain key architectural concepts for $skill in scenario instance #$index."
-            : "Under certificate validation module #$index for $skill, which strategy resolves performance bottlenecks?",
+            ? "Explain key architectural concepts and performance optimization strategies for $skill in module instance #$index."
+            : (qType == "scenario"
+            ? "Scenario: In a high-traffic production system using $skill, state management encounters bottleneck #$index. Which architectural fix is optimal?"
+            : "Which core principle in $skill ensures thread safety and state immutability during async execution #$index?"),
         options: qType == "short"
             ? []
             : [
-          "Optimize async event handling and worker pools",
-          "Synchronize thread priority settings",
-          "Disable memory allocation tracking",
-          "Reconfigure load balancer limits"
+          "Optimize async event loops & memory allocation",
+          "Synchronize thread priority settings globally",
+          "Disable garbage collection tracking",
+          "Reconfigure load balancer round-robin strategy"
         ],
         correctOptionIndex: qType == "short" ? -1 : 0,
         correctAnswer: qType == "short"
-            ? "Efficient async handling and memory reuse."
-            : "Optimize async event handling and worker pools",
-        explanation: "Ensures optimal execution throughput.",
+            ? "Efficient async handling, thread safety, and memory reuse."
+            : "Optimize async event loops & memory allocation",
+        explanation: "Ensures optimal execution throughput and high concurrency.",
       );
     });
 
@@ -384,7 +386,11 @@ Return strictly a raw JSON array:
 
       final response = await _retry(
             () => _gemini.prompt(parts: [Part.text(prompt)]),
+      ).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => null,
       );
+
       final String? outputText = response?.output;
 
       if (outputText != null && outputText.isNotEmpty) {
@@ -393,14 +399,15 @@ Return strictly a raw JSON array:
         return List<Map<String, dynamic>>.from(parsedList);
       }
 
-      return _getFallbackRoadmap(skillName);
+      return getFallbackRoadmap(skillName);
     } catch (e) {
       if (kDebugMode) debugPrint("generateRoadmapModules Error: $e");
-      return _getFallbackRoadmap(skillName);
+      return getFallbackRoadmap(skillName);
     }
   }
 
-  List<Map<String, dynamic>> _getFallbackRoadmap(String skillName) {
+  // Fast Fallback Method for Roadmap Screen
+  List<Map<String, dynamic>> getFallbackRoadmap(String skillName) {
     return [
       {
         "moduleNumber": 1,
@@ -415,6 +422,13 @@ Return strictly a raw JSON array:
         "description": "Practical architectural implementation.",
         "duration": "2 Weeks",
         "topics": ["Security & Optimization", "System Integration", "Best Practices"]
+      },
+      {
+        "moduleNumber": 3,
+        "title": "Production & Deployment",
+        "description": "Real-world scaling and optimization.",
+        "duration": "1 Week",
+        "topics": ["Performance Tuning", "Debugging & Profiling", "CI/CD & Cloud Deployment"]
       }
     ];
   }
@@ -444,7 +458,8 @@ Return raw JSON:
 
       final response = await _retry(
             () => _gemini.prompt(parts: [Part.text(prompt)]),
-      );
+      ).timeout(const Duration(seconds: 6));
+
       final String? outputText = response?.output;
 
       if (outputText != null && outputText.isNotEmpty) {
@@ -493,7 +508,7 @@ Make it detailed and educational. Do not return generic short placeholders.
 
       final response = await _retry(
             () => _gemini.prompt(parts: [Part.text(prompt)]),
-      );
+      ).timeout(const Duration(seconds: 6));
 
       final String? output = response?.output;
       if (output != null && output.trim().isNotEmpty) {

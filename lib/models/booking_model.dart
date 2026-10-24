@@ -10,11 +10,27 @@ class BookingModel {
   final String sessionDate;
   final String sessionTime;
   final DateTime bookingDate;
-  final String status; // 'pending', 'confirmed', 'completed', 'cancelled'
+  final String status; // 'pending', 'Confirmed', 'Completed', 'cancelled'
   final String sessionType;
   final String duration;
   final String notes;
   final double amount;
+
+  // Multi-session & Series fields
+  final int totalSessions;
+  final int sessionNumber;
+  final String seriesId;
+  final String meetingLink;
+
+  // Completion & Review fields
+  final bool sessionCompleted;
+  final DateTime? completedAt;
+  final String recordingUrl;
+  final bool recordingSavedInApp;
+  final bool recordingSavedInGallery;
+  final bool isReviewed;
+  final double? rating;
+  final String reviewText;
 
   BookingModel({
     required this.bookingId,
@@ -31,9 +47,21 @@ class BookingModel {
     this.duration = '60 Mins',
     this.notes = '',
     this.amount = 0.0,
+    this.totalSessions = 1,
+    this.sessionNumber = 1,
+    this.seriesId = '',
+    this.meetingLink = '',
+    this.sessionCompleted = false,
+    this.completedAt,
+    this.recordingUrl = '',
+    this.recordingSavedInApp = false,
+    this.recordingSavedInGallery = false,
+    this.isReviewed = false,
+    this.rating,
+    this.reviewText = '',
   }) : bookingDate = bookingDate ?? DateTime.now();
 
-  // Backward Compatibility Getters (Purane code ke saath compatibility ke liye)
+  // Backward Compatibility Getters
   String get id => bookingId;
   String get userId => studentId;
   String get expertId => teacherId;
@@ -57,21 +85,37 @@ class BookingModel {
       'duration': duration,
       'notes': notes,
       'amount': amount,
+      'totalSessions': totalSessions,
+      'sessionNumber': sessionNumber,
+      'seriesId': seriesId,
+      'meetingLink': meetingLink,
+      'sessionCompleted': sessionCompleted,
+      'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
+      'recordingUrl': recordingUrl,
+      'recordingSavedInApp': recordingSavedInApp,
+      'recordingSavedInGallery': recordingSavedInGallery,
+      'isReviewed': isReviewed,
+      'rating': rating,
+      'reviewText': reviewText,
     };
   }
 
   // Factory constructor from Map / Document ID
   factory BookingModel.fromMap(Map<String, dynamic> map, String docId) {
-    DateTime parsedBookingDate;
+    DateTime parseDateField(dynamic dateVal) {
+      if (dateVal is Timestamp) {
+        return dateVal.toDate();
+      } else if (dateVal is String) {
+        return DateTime.tryParse(dateVal) ?? DateTime.now();
+      }
+      return DateTime.now();
+    }
 
-    if (map['bookingDate'] is Timestamp) {
-      parsedBookingDate = (map['bookingDate'] as Timestamp).toDate();
-    } else if (map['date'] is String) {
-      parsedBookingDate = DateTime.tryParse(map['date']) ?? DateTime.now();
-    } else if (map['bookingDate'] is String) {
-      parsedBookingDate = DateTime.tryParse(map['bookingDate']) ?? DateTime.now();
-    } else {
-      parsedBookingDate = DateTime.now();
+    DateTime? parseNullableDate(dynamic dateVal) {
+      if (dateVal == null) return null;
+      if (dateVal is Timestamp) return dateVal.toDate();
+      if (dateVal is String) return DateTime.tryParse(dateVal);
+      return null;
     }
 
     return BookingModel(
@@ -83,12 +127,24 @@ class BookingModel {
       skill: map['skill'] ?? '',
       sessionDate: map['sessionDate'] ?? '',
       sessionTime: map['sessionTime'] ?? '',
-      bookingDate: parsedBookingDate,
+      bookingDate: parseDateField(map['bookingDate'] ?? map['date']),
       status: map['status'] ?? 'pending',
       sessionType: map['sessionType'] ?? 'Online Session',
       duration: map['duration'] ?? '60 Mins',
       notes: map['notes'] ?? '',
       amount: (map['amount'] ?? 0.0).toDouble(),
+      totalSessions: map['totalSessions'] ?? 1,
+      sessionNumber: map['sessionNumber'] ?? 1,
+      seriesId: map['seriesId'] ?? '',
+      meetingLink: map['meetingLink'] ?? '',
+      sessionCompleted: map['sessionCompleted'] ?? false,
+      completedAt: parseNullableDate(map['completedAt']),
+      recordingUrl: map['recordingUrl'] ?? '',
+      recordingSavedInApp: map['recordingSavedInApp'] ?? false,
+      recordingSavedInGallery: map['recordingSavedInGallery'] ?? false,
+      isReviewed: map['isReviewed'] ?? false,
+      rating: map['rating'] != null ? (map['rating'] as num).toDouble() : null,
+      reviewText: map['reviewText'] ?? '',
     );
   }
 
@@ -114,6 +170,18 @@ class BookingModel {
     String? duration,
     String? notes,
     double? amount,
+    int? totalSessions,
+    int? sessionNumber,
+    String? seriesId,
+    String? meetingLink,
+    bool? sessionCompleted,
+    DateTime? completedAt,
+    String? recordingUrl,
+    bool? recordingSavedInApp,
+    bool? recordingSavedInGallery,
+    bool? isReviewed,
+    double? rating,
+    String? reviewText,
   }) {
     return BookingModel(
       bookingId: bookingId ?? this.bookingId,
@@ -130,6 +198,18 @@ class BookingModel {
       duration: duration ?? this.duration,
       notes: notes ?? this.notes,
       amount: amount ?? this.amount,
+      totalSessions: totalSessions ?? this.totalSessions,
+      sessionNumber: sessionNumber ?? this.sessionNumber,
+      seriesId: seriesId ?? this.seriesId,
+      meetingLink: meetingLink ?? this.meetingLink,
+      sessionCompleted: sessionCompleted ?? this.sessionCompleted,
+      completedAt: completedAt ?? this.completedAt,
+      recordingUrl: recordingUrl ?? this.recordingUrl,
+      recordingSavedInApp: recordingSavedInApp ?? this.recordingSavedInApp,
+      recordingSavedInGallery: recordingSavedInGallery ?? this.recordingSavedInGallery,
+      isReviewed: isReviewed ?? this.isReviewed,
+      rating: rating ?? this.rating,
+      reviewText: reviewText ?? this.reviewText,
     );
   }
 }

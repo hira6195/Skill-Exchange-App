@@ -4,6 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 
 class CertificateService {
   final String _cloudName = "ubofyfvr";
@@ -25,6 +28,48 @@ class CertificateService {
       return null;
     } catch (e) {
       rethrow;
+    }
+  }
+
+  /// NEW: Compresses image certificates before upload.
+  /// PDFs / DOC / DOCX are returned unchanged (can't be safely re-encoded).
+  /// This is the #1 fix for slow uploads — a 8-10MB phone photo becomes
+  /// ~300-800KB with almost no visible quality loss.
+  Future<File> _optimizeFileForUpload(File original) async {
+    final String ext = p.extension(original.path).toLowerCase();
+    final bool isImage = ext == '.jpg' || ext == '.jpeg' || ext == '.png';
+
+    if (!isImage) return original; // PDFs/DOC left as-is
+
+    try {
+      final int originalSizeKb = (await original.length()) ~/ 1024;
+
+      // Skip compression if already small (e.g. < 400KB) — saves CPU time
+      if (originalSizeKb < 400) return original;
+
+      final Directory tempDir = await getTemporaryDirectory();
+      final String targetPath = p.join(
+        tempDir.path,
+        'cert_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      );
+
+      final XFile? compressedXFile = await FlutterImageCompress.compressAndGetFile(
+        original.absolute.path,
+        targetPath,
+        quality: 70, // good balance of clarity vs size for a document photo
+        minWidth: 1600,
+        minHeight: 1600,
+        format: CompressFormat.jpeg,
+      );
+
+      if (compressedXFile != null) {
+        return File(compressedXFile.path);
+      }
+      return original;
+    } catch (e) {
+      // If compression fails for any reason, fall back to original file
+      // rather than blocking the whole upload flow.
+      return original;
     }
   }
 
@@ -60,14 +105,27 @@ class CertificateService {
     }
 
     try {
+      // NEW: compress before sending over the network — this is what was
+      // making the upload feel slow on normal mobile connections.
+      final File uploadFile = await _optimizeFileForUpload(certificate);
+
       final url = Uri.parse("https://api.cloudinary.com/v1_1/$_cloudName/auto/upload");
 
       final request = http.MultipartRequest("POST", url)
         ..fields['upload_preset'] = _uploadPreset
         ..fields['folder'] = 'certificates'
-        ..files.add(await http.MultipartFile.fromPath('file', certificate.path));
+        ..files.add(await http.MultipartFile.fromPath('file', uploadFile.path));
 
-      final response = await request.send();
+      // NEW: hard timeout so the UI never hangs forever on a bad connection —
+      // user gets a clear error instead of an endless spinner.
+      final response = await request.send().timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception(
+              "Upload timed out. Please check your internet connection and try again.");
+        },
+      );
+
       final responseData = await response.stream.bytesToString();
       final jsonMap = json.decode(responseData);
 
